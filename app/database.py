@@ -237,6 +237,51 @@ class Database:
                     limit
                 )
             return [dict(row) for row in rows]
+    
+    async def get_recent_signals(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recent signals from the database"""
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT * FROM signals_sent 
+                ORDER BY timestamp DESC 
+                LIMIT $1
+                """,
+                limit
+            )
+            return [dict(row) for row in rows]
+    
+    async def get_system_stats(self) -> Dict[str, Any]:
+        """Get system statistics"""
+        async with self.get_connection() as conn:
+            # Count total signals
+            total_signals = await conn.fetchval("SELECT COUNT(*) FROM signals_sent")
+            
+            # Count signals in last 24h
+            signals_24h = await conn.fetchval(
+                "SELECT COUNT(*) FROM signals_sent WHERE timestamp > NOW() - INTERVAL '24 hours'"
+            )
+            
+            # Count anomalies
+            total_anomalies = await conn.fetchval("SELECT COUNT(*) FROM anomali_logs")
+            
+            # Count smart wallets
+            smart_wallets = await conn.fetchval("SELECT COUNT(*) FROM smart_wallets")
+            
+            # Calculate success rate (mock calculation based on status)
+            success_count = await conn.fetchval(
+                "SELECT COUNT(*) FROM signals_sent WHERE status = 'sent'"
+            )
+            success_rate = round((success_count / total_signals * 100), 2) if total_signals > 0 else 0
+            
+            return {
+                "total_signals": total_signals,
+                "signals_24h": signals_24h,
+                "total_anomalies": total_anomalies,
+                "smart_wallets_count": smart_wallets,
+                "success_rate": success_rate,
+                "uptime_hours": 0  # Will be calculated in main.py
+            }
 
 
 # Global database instance
@@ -248,3 +293,13 @@ async def get_database() -> Database:
     if not db._initialized:
         await db.connect()
     return db
+
+
+async def get_recent_signals(limit: int = 50) -> List[Dict[str, Any]]:
+    """Helper function to get recent signals"""
+    return await db.get_recent_signals(limit)
+
+
+async def get_system_stats() -> Dict[str, Any]:
+    """Helper function to get system stats"""
+    return await db.get_system_stats()

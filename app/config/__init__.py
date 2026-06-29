@@ -71,6 +71,16 @@ class Settings(BaseSettings):
         description="Logging level"
     )
     
+    # Redis Configuration (Optional)
+    redis_host: Optional[str] = Field(
+        default=None,
+        description="Redis host for caching and rate limiting"
+    )
+    redis_port: int = Field(
+        default=6379,
+        description="Redis port"
+    )
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

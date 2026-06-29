@@ -9,6 +9,7 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from app.config import get_settings, Settings
@@ -16,6 +17,7 @@ from app.database import Database, get_database
 from app.streamer import BinanceStreamer
 from app.analyzer import DeepDiveAnalyzer
 from app.notifier import TelegramNotifier
+from app.ui.routes import router as ui_router
 
 # Configure logging
 logging.basicConfig(
@@ -157,9 +159,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crypto Oracle AI",
     description="Decentralized Pump/Dump Detection System",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan
 )
+
+# Include UI router
+app.include_router(ui_router, prefix="/dashboard")
+
+# Mount static files (only if directory exists)
+import os
+if os.path.exists("/app/ui/static"):
+    app.mount("/static", StaticFiles(directory="/app/ui/static"), name="static")
 
 
 @app.get("/health")
@@ -176,10 +186,11 @@ async def root():
     """Root endpoint with API information"""
     return {
         "name": "Crypto Oracle AI",
-        "version": "1.0.0",
-        "description": "Decentralized Pump/Dump Detection System",
+        "version": "2.0.0",
+        "description": "Decentralized Pump/Dump Detection System with Enterprise Security",
         "endpoints": {
             "/health": "Health check endpoint",
+            "/dashboard": "Real-time monitoring dashboard",
             "/docs": "API documentation (Swagger UI)"
         }
     }
