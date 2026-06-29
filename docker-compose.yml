@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: crypto_oracle_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-crypto_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crypto_password}
+      POSTGRES_DB: ${POSTGRES_DB:-crypto_oracle}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - crypto_oracle_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional Redis for message queuing (can be enabled if needed)
+  redis:
+    image: redis:7-alpine
+    container_name: crypto_oracle_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - crypto_oracle_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - with-redis
+
+  # Main Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crypto_oracle_app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-crypto_user}:${POSTGRES_PASSWORD:-crypto_password}@postgres:5432/${POSTGRES_DB:-crypto_oracle}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY}
+      ETHERSCAN_BASE_URL: https://api.etherscan.io/api
+      CRYPTOPANIC_API_KEY: ${CRYPTOPANIC_API_KEY}
+      CRYPTOPANIC_BASE_URL: https://cryptopanic.com/api/v1
+      BINANCE_WS_URL: wss://stream.binance.com:9443/stream?streams=!ticker@arr
+      VOLUME_SPIKE_THRESHOLD: ${VOLUME_SPIKE_THRESHOLD:-300}
+      VOLUME_WINDOW_MINUTES: ${VOLUME_WINDOW_MINUTES:-5}
+      HEALTH_CHECK_PORT: 8080
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - crypto_oracle_network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  crypto_oracle_network:
+    driver: bridge
