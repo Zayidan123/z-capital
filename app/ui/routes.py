@@ -42,10 +42,12 @@ async def broadcast_update(data: Dict[str, Any]):
 @router.get("/", response_class=HTMLResponse)
 async def dashboard_home(request: Request):
     """Halaman utama dashboard"""
-    return templates.TemplateResponse("dashboard.html", {
+    # Perbaikan bug: TemplateResponse memerlukan parameter 'name' dan 'context' secara eksplisit
+    context = {
         "request": request,
         "title": "Crypto Oracle AI - Dashboard"
-    })
+    }
+    return templates.TemplateResponse(name="dashboard.html", context=context)
 
 
 @router.get("/api/stats")
