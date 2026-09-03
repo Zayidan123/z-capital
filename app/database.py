@@ -3,6 +3,7 @@ Database module for Crypto Oracle AI
 Handles async PostgreSQL connections and operations
 """
 import asyncio
+import json
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -146,6 +147,27 @@ class Database:
                     symbol VARCHAR(50),
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                 )
+            """)
+
+            # Create webhook_outbox table (v2.10: antrean delivery gagal
+            # total - replay manual/otomatis, tahan restart)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS webhook_outbox (
+                    id SERIAL PRIMARY KEY,
+                    payload JSONB NOT NULL,
+                    rule VARCHAR(100),
+                    symbol VARCHAR(50),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    last_reason VARCHAR(100),
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    last_attempt_at TIMESTAMPTZ
+                )
+            """)
+
+            # Create index for the outbox (oldest-first replay scan)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_webhook_outbox_created
+                ON webhook_outbox(created_at)
             """)
 
             # Create indexes for better query performance
@@ -547,6 +569,35 @@ class Database:
             )
             return [dict(row) for row in rows]
 
+    async def get_alert_rule_stats_daily(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Agregasi alert per-rule per-HARI (v2.10, audit 7-hari).
+
+        Melengkapi get_alert_rule_stats (per-jam): jendela seminggu
+        menghasilkan 168 bucket jam terlalu padat untuk sparkline, jadi
+        dikelompokkan per hari. Sifatnya sparse seperti saudaranya;
+        endpoint yang memakai method ini yang mengisi slot hari kosong.
+        """
+        window = max(1, min(int(days), 30))
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    rule,
+                    date_trunc('day', timestamp) AS day,
+                    COUNT(*)::int AS count,
+                    MAX(CASE priority
+                        WHEN 'HIGH' THEN 2
+                        WHEN 'MEDIUM' THEN 1
+                        ELSE 0 END)::int AS severity
+                FROM alert_history
+                WHERE timestamp > NOW() - make_interval(days => $1)
+                GROUP BY rule, date_trunc('day', timestamp)
+                ORDER BY rule ASC, day ASC
+                """,
+                window,
+            )
+            return [dict(row) for row in rows]
+
     async def get_alert_history_stats(self) -> Dict[str, Any]:
         """Statistik tabel alert_history untuk panel retensi dashboard."""
         async with self.get_connection() as conn:
@@ -676,6 +727,165 @@ class Database:
                 except (ValueError, IndexError):
                     return 0
             return 0
+
+    # ===== v2.10: Webhook outbox (antrean delivery gagal total) =====
+
+    async def enqueue_webhook_outbox(
+        self,
+        payload: Dict[str, Any],
+        rule: Optional[str] = None,
+        symbol: Optional[str] = None,
+        attempts: int = 0,
+        last_reason: Optional[str] = None,
+    ) -> Optional[int]:
+        """Simpan alert yang gagal terkirim ke outbox (replay nanti).
+
+        Dipanggil best-effort oleh pemanggil: bila DB gagal, alert tetap
+        sudah disiarkan dan pipeline utama tidak boleh terpengaruh.
+        Returns id baris baru, atau None bila gagal.
+        """
+        try:
+            async with self.get_connection() as conn:
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO webhook_outbox
+                        (payload, rule, symbol, attempts, last_reason)
+                    VALUES ($1::jsonb, $2, $3, $4, $5)
+                    RETURNING id
+                    """,
+                    json.dumps(payload, default=str),
+                    (str(rule)[:100] if rule else None),
+                    (str(symbol)[:50] if symbol else None),
+                    max(0, int(attempts or 0)),
+                    (str(last_reason)[:100] if last_reason else None),
+                )
+                return row["id"] if row else None
+        except Exception as e:  # noqa: BLE001 - outbox tidak boleh raise di pipeline
+            logger.debug(f"Webhook outbox enqueue failed: {e}")
+            return None
+
+    async def get_webhook_outbox(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Ambil antrean outbox (tertua dulu - urutan replay adil)."""
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, payload, rule, symbol, attempts, last_reason,
+                       created_at, last_attempt_at
+                FROM webhook_outbox
+                ORDER BY created_at ASC, id ASC
+                LIMIT $1
+                """,
+                max(1, min(int(limit), 200)),
+            )
+            return [dict(row) for row in rows]
+
+    async def count_webhook_outbox(self) -> int:
+        """Jumlah alert yang masih menunggu replay."""
+        async with self.get_connection() as conn:
+            return int(await conn.fetchval("SELECT COUNT(*) FROM webhook_outbox") or 0)
+
+    async def delete_webhook_outbox(self, ids: List[int]) -> int:
+        """Hapus antrean yang sudah berhasil direplay. Returns jumlah hapus."""
+        clean = [int(i) for i in ids if i is not None]
+        if not clean:
+            return 0
+        async with self.get_connection() as conn:
+            status = await conn.execute(
+                "DELETE FROM webhook_outbox WHERE id = ANY($1)", clean
+            )
+            if isinstance(status, str) and status.startswith("DELETE"):
+                try:
+                    return int(status.split()[-1])
+                except (ValueError, IndexError):
+                    return 0
+            return 0
+
+    async def record_outbox_attempt(self, ids: List[int], reason: Optional[str] = None) -> None:
+        """Catat bahwa sekumpulan antrean baru saja dicoba replay lagi."""
+        clean = [int(i) for i in ids if i is not None]
+        if not clean:
+            return
+        async with self.get_connection() as conn:
+            await conn.execute(
+                """
+                UPDATE webhook_outbox
+                SET attempts = attempts + 1,
+                    last_attempt_at = CURRENT_TIMESTAMP,
+                    last_reason = $2
+                WHERE id = ANY($1)
+                """,
+                clean,
+                (str(reason)[:100] if reason else None),
+            )
+
+    async def prune_webhook_outbox(self, retention_days: int) -> int:
+        """Hapus antrean lebih tua dari N hari (0 = tidak menghapus)."""
+        days = int(retention_days)
+        if days <= 0:
+            return 0
+        async with self.get_connection() as conn:
+            status = await conn.execute(
+                """
+                DELETE FROM webhook_outbox
+                WHERE created_at < NOW() - make_interval(days => $1)
+                """,
+                days,
+            )
+            if isinstance(status, str) and status.startswith("DELETE"):
+                try:
+                    return int(status.split()[-1])
+                except (ValueError, IndexError):
+                    return 0
+            return 0
+
+    # ===== v2.10: Delivery health (agregasi 24h, satu query) =====
+
+    async def get_webhook_health(self, hours: int = 24) -> Dict[str, Any]:
+        """Ringkasan kesehatan delivery webhook dalam jendela N jam.
+
+        Satu pass agregasi: total, ok, fail, success rate, rata-rata
+        durasi (hanya baris dengan durasi), rata-rata percobaan, alasan
+        kegagalan terakhir. Bila tidak ada data, field tetap terisi
+        dengan nilai netral agar frontend tidak perlu null-check.
+        """
+        window = max(1, min(int(hours), 720))
+        async with self.get_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT COUNT(*)::int AS total,
+                       COUNT(*) FILTER (WHERE ok)::int AS ok,
+                       COUNT(*) FILTER (WHERE NOT ok)::int AS fail,
+                       AVG(duration_ms)::float AS avg_duration_ms,
+                       AVG(attempts)::float AS avg_attempts
+                FROM webhook_deliveries
+                WHERE created_at > NOW() - make_interval(hours => $1)
+                """,
+                window,
+            )
+            last_fail = await conn.fetchval(
+                """
+                SELECT reason FROM webhook_deliveries
+                WHERE NOT ok AND created_at > NOW() - make_interval(hours => $1)
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                window,
+            )
+        d = dict(row) if row else {}
+        total = int(d.get("total") or 0)
+        ok_count = int(d.get("ok") or 0)
+        avg_dur = d.get("avg_duration_ms")
+        avg_att = d.get("avg_attempts")
+        return {
+            "window_hours": window,
+            "total": total,
+            "ok": ok_count,
+            "fail": int(d.get("fail") or 0),
+            "success_rate": round(ok_count / total * 100, 1) if total else None,
+            "avg_duration_ms": int(avg_dur) if avg_dur is not None else None,
+            "avg_attempts": round(float(avg_att), 2) if avg_att is not None else None,
+            "last_fail_reason": last_fail,
+        }
 
     async def get_recent_signals(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent signals from the database"""

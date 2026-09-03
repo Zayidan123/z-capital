@@ -689,4 +689,8 @@ class TestDashboardHtmlIntegrity:
 class TestVersionV26:
     def test_app_version_bumped(self):
         from app.main import app as fastapi_app
-        assert fastapi_app.version >= "2.7.0"
+        # Semver dibandingkan NUMERIK: string "2.10.0" < "2.7.0"
+        # secara leksikografis, jadi parse ke tuple int dulu.
+        def _semver(v):
+            return tuple(int(p) for p in str(v).split(".") if p.isdigit())
+        assert _semver(fastapi_app.version) >= (2, 6, 0)

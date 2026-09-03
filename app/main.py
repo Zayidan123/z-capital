@@ -235,16 +235,20 @@ class CryptoOracleApp:
 
         Logging delivery dilakukan best-effort: kegagalan DB TIDAK boleh
         memengaruhi pipeline alert maupun dispatch itu sendiri.
+        v2.10: bila SEMUA percobaan gagal, alert masuk outbox agar bisa
+        direplay (otomatis oleh loop retry / manual via dashboard) -
+        delivery yang gagal total tidak lagi hilang begitu saja.
         """
         try:
             result = await dispatcher.dispatch(alert=alert)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"Webhook dispatch error: {e}")
             return
+        ok = bool(result.get("ok"))
         try:
             await self.db.log_webhook_delivery(
                 event="alert",
-                ok=bool(result.get("ok")),
+                ok=ok,
                 status_code=result.get("status_code"),
                 reason=result.get("reason"),
                 attempts=int(result.get("attempts") or 1),
@@ -254,6 +258,89 @@ class CryptoOracleApp:
             )
         except Exception as e:  # noqa: BLE001
             logger.debug(f"Webhook delivery log failed: {e}")
+        # v2.10: gagal total -> masukkan outbox (payload = bentuk alert
+        # yang sama dengan yang POST webhook asli kirim)
+        if not ok:
+            try:
+                payload = dispatcher._build_payload(alert)
+                await self.db.enqueue_webhook_outbox(
+                    payload=payload,
+                    rule=alert.get("rule"),
+                    symbol=alert.get("symbol"),
+                    attempts=int(result.get("attempts") or 0),
+                    last_reason=result.get("reason"),
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.debug(f"Webhook outbox enqueue failed: {e}")
+
+    # ===== v2.10: Outbox retry otomatis =====
+
+    async def _replay_outbox_once(self, batch: int = 20) -> Dict[str, int]:
+        """Satu siklus replay outbox (dipakai loop retry maupun startup).
+
+        Batch dibatasi agar satu siklus tidak menggantung; dispatcher
+        tidak dikonfigurasi = noop (antrean menunggu URL dipasang).
+        Returns ringkasan {queued, sent, failed}.
+        """
+        summary = {"queued": 0, "sent": 0, "failed": 0}
+        dispatcher = get_webhook()
+        if dispatcher is None or not getattr(dispatcher, "url", None):
+            return summary
+        try:
+            queued = await self.db.get_webhook_outbox(limit=max(1, int(batch)))
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Outbox replay read failed: {e}")
+            return summary
+        summary["queued"] = len(queued)
+        if not queued:
+            return summary
+        sent_ids, failed_ids, last_reason = [], [], None
+        for row in queued:
+            payload = row.get("payload")
+            alert = None
+            if isinstance(payload, dict):
+                alert = payload.get("alert") or payload
+            result = await dispatcher.dispatch(alert=alert)
+            if result.get("ok"):
+                sent_ids.append(row["id"])
+            else:
+                failed_ids.append(row["id"])
+                last_reason = result.get("reason")
+        try:
+            if sent_ids:
+                await self.db.delete_webhook_outbox(sent_ids)
+            if failed_ids:
+                await self.db.record_outbox_attempt(failed_ids, last_reason)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Outbox replay bookkeeping failed: {e}")
+        summary["sent"] = len(sent_ids)
+        summary["failed"] = len(failed_ids)
+        if summary["sent"]:
+            logger.info(
+                f"Outbox replay: {summary['sent']} delivered, "
+                f"{summary['failed']} still failing"
+            )
+        return summary
+
+    async def _outbox_retry_loop(self, interval_minutes: int = 5) -> None:
+        """Loop background: replay outbox secara periodik (v2.10).
+
+        Interval minimum efektif 1 menit. Dispatcher belum dipasang =
+        siklus noop murah (satu query count saja bila pun itu gagal).
+        Loop tidak pernah mati karena error DB maupun jaringan.
+        """
+        interval = max(1, int(interval_minutes or 1)) * 60
+        try:
+            # siklus pertama setelah 30 detik agar startup tidak sibuk
+            await asyncio.sleep(30)
+            while True:
+                try:
+                    await self._replay_outbox_once()
+                except Exception as e:  # noqa: BLE001
+                    logger.debug(f"Outbox retry cycle failed: {e}")
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logger.debug("Outbox retry loop cancelled")
 
     # ===== v2.5: Retensi alert_history (housekeeping otomatis) =====
 
@@ -275,6 +362,12 @@ class CryptoOracleApp:
             await self.db.prune_webhook_deliveries(days)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"Webhook delivery prune failed: {e}")
+        # v2.10: outbox juga ikut retensi - antrean basi tidak boleh
+        # menumpuk selamanya (replay alert seminggu lalu tak berguna)
+        try:
+            await self.db.prune_webhook_outbox(days)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Webhook outbox prune failed: {e}")
         record_prune_result(_utc_now().isoformat(), deleted)
         if deleted:
             logger.info(f"Alert retention: pruned {deleted} rows (>{days} days old)")
@@ -429,6 +522,9 @@ async def lifespan(app: FastAPI):
         )
     )
 
+    # v2.10: replay outbox delivery yang gagal secara periodik
+    app_instance._spawn_background_task(app_instance._outbox_retry_loop(5))
+
     yield
 
     # Shutdown
@@ -440,7 +536,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crypto Oracle AI",
     description="Decentralized Pump/Dump Detection System",
-    version="2.9.0",
+    version="2.10.0",
     lifespan=lifespan
 )
 
@@ -468,7 +564,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "name": "Crypto Oracle AI",
-        "version": "2.9.0",
+        "version": "2.10.0",
         "description": "Decentralized Pump/Dump Detection System with Enterprise Security",
         "endpoints": {
             "/health": "Health check endpoint",

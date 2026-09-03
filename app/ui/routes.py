@@ -664,20 +664,40 @@ async def bulk_update_alert_rules(body: BulkRuleUpdateRequest):
 
 
 @router.get("/api/alerts/rule-stats", dependencies=API_DEPS)
-async def get_alert_rule_stats(hours: int = 24):
-    """Agregasi alert per-rule per-jam untuk audit sparkline (v2.7).
+async def get_alert_rule_stats(hours: int = 24, bucket: str = "hour"):
+    """Agregasi alert per-rule per-jam / per-hari untuk audit sparkline.
 
-    Slot jam kosong diisi count 0 sehingga frontend bisa langsung
-    menggambar bar chart tanpa interpolasi. Window dibatasi 1..168 jam
-    (sparkline tidak butuh window setahun).
+    v2.7: per-jam (default). v2.10: bucket=day utk audit 7-hari -
+    168 slot jam terlalu padat utk sparkline, jadi dikelompokkan per
+    hari. Slot kosong diisi count 0 sehingga frontend bisa langsung
+    menggambar bar chart tanpa interpolasi. Window: 1..168 jam utk
+    bucket=hour, 1..30 hari utk bucket=day.
     """
     try:
-        hours_f = max(1, min(int(hours), 168))
-        rows = await app_database.db.get_alert_rule_stats(hours=hours_f)
+        mode = "day" if str(bucket).lower() in {"day", "daily", "d"} else "hour"
+        # Clamp SEBELUM menyentuh DB agar window salah tidak memicu
+        # agregasi berat di SQL (kontrak lama v2.7 dipertahankan).
+        if mode == "day":
+            window_n = max(1, min(int(hours), 30))
+            try:
+                rows = await app_database.db.get_alert_rule_stats_daily(days=window_n)
+            except Exception as db_err:
+                return {"status": "error", "message": str(db_err)}
+            now_slot = datetime.now(timezone.utc).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            slot_key, slot_iso, step = "day", "day", timedelta(days=1)
+        else:
+            window_n = max(1, min(int(hours), 168))
+            try:
+                rows = await app_database.db.get_alert_rule_stats(hours=window_n)
+            except Exception as db_err:
+                return {"status": "error", "message": str(db_err)}
+            now_slot = datetime.now(timezone.utc).replace(
+                minute=0, second=0, microsecond=0
+            )
+            slot_key, slot_iso, step = "hour", "hour", timedelta(hours=1)
 
-        now_hour = datetime.now(timezone.utc).replace(
-            minute=0, second=0, microsecond=0
-        )
         per_rule: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             name = str(row.get("rule", ""))
@@ -688,9 +708,9 @@ async def get_alert_rule_stats(hours: int = 24):
                        "_sparse": {}}
             )
             count = int(row.get("count", 0) or 0)
-            hour = row.get("hour")
+            slot = row.get(slot_key)
             # Key epoch-detik agar robust terhadap perbedaan repr tz
-            key = int(hour.timestamp()) if hasattr(hour, "timestamp") else None
+            key = int(slot.timestamp()) if hasattr(slot, "timestamp") else None
             if key is None:
                 continue
             entry["_sparse"][key] = entry["_sparse"].get(key, 0) + count
@@ -700,12 +720,12 @@ async def get_alert_rule_stats(hours: int = 24):
         for name, entry in per_rule.items():
             buckets = []
             last_ts = None
-            for i in range(hours_f - 1, -1, -1):
-                slot_dt = now_hour - timedelta(hours=i)
+            for i in range(window_n - 1, -1, -1):
+                slot_dt = now_slot - step * i
                 key = int(slot_dt.timestamp())
                 count = entry["_sparse"].get(key, 0)
                 buckets.append({
-                    "hour": slot_dt.isoformat(),
+                    slot_iso: slot_dt.isoformat(),
                     "count": count,
                 })
                 if count > 0:
@@ -723,7 +743,8 @@ async def get_alert_rule_stats(hours: int = 24):
         return {
             "status": "success",
             "timestamp": _utc_now_iso(),
-            "window_hours": hours_f,
+            "window_hours": window_n if mode == "hour" else window_n * 24,
+            "bucket": mode,
             "count": len(data),
             "data": data,
         }
@@ -1137,6 +1158,172 @@ async def get_webhook_deliveries(limit: int = 50):
             "data": deliveries,
         }
     except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# ===== v2.10: Webhook outbox + delivery health =====
+
+@router.get("/api/webhook/health", dependencies=API_DEPS)
+async def webhook_health(hours: int = 24):
+    """Ringkasan kesehatan delivery webhook (v2.10).
+
+    Agregasi satu-pass atas tabel webhook_deliveries: total/ok/fail,
+    success rate, rata-rata durasi & percobaan, alasan gagal terakhir.
+    Bila DB gagal, fallback hasil terakhir dispatcher in-memory agar
+    kartu kesehatan tetap jujur (bukan kosong palsu).
+    """
+    try:
+        try:
+            health = await app_database.db.get_webhook_health(hours=hours)
+            source = "database"
+        except Exception as db_err:
+            logger.warning(f"Webhook health DB unavailable: {db_err}")
+            dispatcher = get_webhook()
+            last = getattr(dispatcher, "last_result", None) if dispatcher else None
+            health = {
+                "window_hours": max(1, min(int(hours), 720)),
+                "total": 1 if last else 0,
+                "ok": 1 if (last and last.get("ok")) else 0,
+                "fail": 1 if (last and not last.get("ok")) else 0,
+                "success_rate": (
+                    100.0 if (last and last.get("ok")) else
+                    (0.0 if last else None)
+                ),
+                "avg_duration_ms": last.get("duration_ms") if last else None,
+                "avg_attempts": float(last.get("attempts")) if last and last.get("attempts") else None,
+                "last_fail_reason": last.get("reason") if (last and not last.get("ok")) else None,
+            }
+            source = "memory"
+        try:
+            pending = await app_database.db.count_webhook_outbox()
+        except Exception:
+            pending = 0
+        health["outbox_pending"] = pending
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "source": source,
+            "data": health,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/webhook/outbox", dependencies=API_DEPS)
+async def get_webhook_outbox(limit: int = 50):
+    """Antrean alert yang gagal terkirim dan menunggu replay (v2.10).
+
+    Payload alert TIDAK ikut dikirim ke dashboard (bisa besar dan
+    mengandung detail), cukup metadata: rule/symbol/attempts/reason/
+    waktu antre. Terurut terlama dulu - urutan replay paling adil.
+    """
+    try:
+        limit_f = max(1, min(int(limit), 200))
+        rows = await app_database.db.get_webhook_outbox(limit=limit_f)
+        items = []
+        for row in rows:
+            created = row.get("created_at")
+            last_att = row.get("last_attempt_at")
+            items.append({
+                "id": row.get("id"),
+                "rule": row.get("rule"),
+                "symbol": row.get("symbol"),
+                "attempts": row.get("attempts"),
+                "last_reason": row.get("last_reason"),
+                "queued_at": created.isoformat() if hasattr(created, "isoformat") else created,
+                "last_attempt_at": last_att.isoformat() if hasattr(last_att, "isoformat") else last_att,
+            })
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "count": len(items),
+            "data": items,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/api/webhook/outbox/replay", dependencies=API_DEPS)
+async def replay_webhook_outbox():
+    """Coba kirim ulang seluruh antrean outbox (maks 50 per panggilan).
+
+    Hanya berjalan bila webhook sudah dikonfigurasi - tanpa URL tujuan
+    replay mustahil dan response menjelaskan itu. Alert yang berhasil
+    dihapus dari outbox; yang masih gagal tetap antre dengan counter
+    attempts naik. Hasil per-item diringkas; antrean besar dipotong
+    50 agar endpoint tidak menggantung lama.
+    """
+    dispatcher = get_webhook()
+    if dispatcher is None or not getattr(dispatcher, "url", None):
+        return {
+            "status": "success",
+            "replayed": 0,
+            "sent": 0,
+            "failed": 0,
+            "remaining": 0,
+            "reason": "not_configured",
+            "message": "Set webhook_url in settings before replaying the outbox.",
+        }
+    try:
+        queued = await app_database.db.get_webhook_outbox(limit=50)
+        if not queued:
+            return {
+                "status": "success",
+                "replayed": 0,
+                "sent": 0,
+                "failed": 0,
+                "remaining": await app_database.db.count_webhook_outbox(),
+                "message": "Outbox is empty - nothing to replay.",
+            }
+        sent_ids: List[int] = []
+        failed_ids: List[int] = []
+        last_reason = None
+        for row in queued:
+            payload = row.get("payload")
+            alert = None
+            if isinstance(payload, dict):
+                alert = payload.get("alert") or payload
+            elif isinstance(payload, str):
+                try:
+                    parsed = json.loads(payload)
+                    alert = parsed.get("alert") or parsed if isinstance(parsed, dict) else None
+                except (ValueError, TypeError):
+                    alert = None
+            result = await dispatcher.dispatch(alert=alert)
+            reason = result.get("reason")
+            if result.get("ok"):
+                sent_ids.append(row["id"])
+                try:
+                    await app_database.db.log_webhook_delivery(
+                        event="replay",
+                        ok=True,
+                        status_code=result.get("status_code"),
+                        attempts=int(result.get("attempts") or 1),
+                        duration_ms=result.get("duration_ms"),
+                        rule=row.get("rule"),
+                        symbol=row.get("symbol"),
+                    )
+                except Exception as log_err:  # noqa: BLE001
+                    logger.debug(f"Replay delivery log failed: {log_err}")
+            else:
+                failed_ids.append(row["id"])
+                last_reason = reason
+        if sent_ids:
+            await app_database.db.delete_webhook_outbox(sent_ids)
+        if failed_ids:
+            await app_database.db.record_outbox_attempt(failed_ids, last_reason)
+        remaining = await app_database.db.count_webhook_outbox()
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "replayed": len(queued),
+            "sent": len(sent_ids),
+            "failed": len(failed_ids),
+            "remaining": remaining,
+            "last_reason": last_reason,
+        }
+    except Exception as e:
+        logger.warning(f"Webhook outbox replay failed: {e}")
         return {"status": "error", "message": str(e)}
 
 

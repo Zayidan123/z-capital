@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.9
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.10
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-347%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-389%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -73,7 +73,7 @@ z-capital/
 │   ├── notifier.py       # Telegram bot notifications
 │   ├── logging_config.py # Structured logging (JSON + console)
 │   └── main.py           # Orchestrator + FastAPI app
-├── tests/                # Test suite lengkap (347 tests, semua mock - tanpa DB/network)
+├── tests/                # Test suite lengkap (389 tests, semua mock - tanpa DB/network)
 ├── scripts/deploy.sh     # Deployment helper
 ├── Dockerfile            # Multi-stage build, non-root user, healthcheck
 ├── docker-compose.yml    # PostgreSQL + Redis (optional) + App
@@ -188,13 +188,16 @@ docker compose logs -f app
 | `/dashboard/api/symbol/{symbol}` | GET | Detail lengkap satu symbol: agregat + riwayat harga + anomali (`?history_points=10..500`) |
 | `/dashboard/api/alerts/rules` | GET | Daftar alert rules (metadata + threshold, otomatis menerapkan threshold tersimpan DB) |
 | `/dashboard/api/alerts/rules/{name}` | PUT | Ubah threshold rule editable + persist ke DB (body `{"threshold": number}`, response flag `persisted`) |
-| `/dashboard/api/alerts/rule-stats` | GET | **v2.7** Agregasi alert per-rule per-jam untuk audit sparkline (`?hours=1..168`; slot jam kosong diisi 0, `total` + `last_fired` per rule) |
+| `/dashboard/api/alerts/rule-stats` | GET | **v2.7** Agregasi alert per-rule untuk audit sparkline — **v2.10 `?bucket=day`** untuk audit 7-hari (slot hari kosong diisi 0, clamp 1..30 hari; bucket=hour tetap 1..168 jam; `total` + `last_fired` per rule) |
 | `/dashboard/api/alerts/rules/export` | GET | **v2.7** Export semua alert rules sebagai file JSON attachment (backup/migrasi antar instans) |
 | `/dashboard/api/alerts/rules/import` | POST | **v2.7** Bulk import threshold rules dari JSON export (status per-item: `updated`/`unknown`/`not_editable`/`invalid_threshold` — satu item jelek tidak menggagalkan batch) |
 | `/dashboard/api/alerts/rules/bulk` | POST | **v2.8** Terapkan SATU threshold ke banyak rule sekaligus (body `{"names": [1..50 nama], "threshold": >= 0}`; status per-item konsisten dgn import; NaN/Infinity/negatif ditolak 400) |
 | `/dashboard/api/webhook/status` | GET | **v2.8** Status channel webhook (flag configured, host tersamarkan `scheme://host` - path/query TIDAK pernah bocor, hasil delivery terakhir) |
 | `/dashboard/api/webhook/test` | POST | **v2.8** Kirim payload test JSON ke webhook terkonfigurasi (gagal delivery = hasil `sent:false` + reason, bukan error endpoint; **v2.9** hasil dicatat ke delivery log + field `attempts`) |
 | `/dashboard/api/webhook/deliveries` | GET | **v2.9** Log delivery webhook terbaru dari DB (event/ok/status_code/reason/attempts/duration_ms/rule/symbol, `?limit=1..200`; fallback in-memory saat DB down) |
+| `/dashboard/api/webhook/health` | GET | **v2.10** Ringkasan kesehatan delivery 24 jam: total/ok/fail, success rate, rata-rata durasi & attempts, alasan gagal terakhir, jumlah outbox pending (`?hours=1..720`; fallback in-memory saat DB down) |
+| `/dashboard/api/webhook/outbox` | GET | **v2.10** Antrean alert yang gagal terkirim dan menunggu replay (metadata rule/symbol/attempts/reason/waktu terurut terlama dulu — payload alert TIDAK disertakan, `?limit=1..200`) |
+| `/dashboard/api/webhook/outbox/replay` | POST | **v2.10** Kirim ulang antrean outbox (maks 50 per panggilan): sukses dihapus + dicatat ke delivery log sebagai event `replay`, gagal tetap antre dengan attempts naik; `not_configured` bila URL belum dipasang |
 | `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`; **v2.6 filter `?symbol=` & `?hours=`**, **v2.9 `?priority=`** high/medium/low — cocok untuk data `HIGH` maupun `high` via LOWER, `?limit=1..200`) |
 | `/dashboard/api/alerts/heatmap` | GET | Agregasi alert per-symbol per-jam untuk heat map (`?hours=6..168`) |
 | `/dashboard/api/alerts/heatmap.csv` | GET | **v2.6** Export agregasi heat map sebagai CSV (`?hours=6..168`; kolom symbol/hour/alert_count/severity) |
@@ -234,6 +237,7 @@ docker compose logs -f app
 | `alert_history` | Riwayat alert ter-trigger (rule, priority, symbol, data JSONB — persisten v2.4; auto-prune via retensi v2.5) |
 | `app_settings` | Runtime settings key-value (v2.6): retensi, refresh interval, feed limit, konfigurasi Telegram (secret terenkripsi) — survive restart |
 | `webhook_deliveries` | Log hasil pengiriman webhook (v2.9): event test/alert, ok, status code, reason, jumlah attempts (retry), durasi, rule/symbol — audit tahan restart, di-prune bersama retensi alert_history |
+| `webhook_outbox` | Antrean delivery gagal total (v2.10): payload alert JSONB + rule/symbol + attempts + last_reason + waktu antre — di-replay otomatis oleh loop background tiap 5 menit atau manual via tombol **Replay** di dashboard, dihapus saat sukses, di-prune bersama retensi |
 
 ---
 
@@ -252,7 +256,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 347 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure + **WebhookDispatcher v2.8**: payload test/alert, masking URL, dispatch sukses/gagal/timeout via transport injeksi; **v2.9 retry/backoff** dengan attempts + duration_ms), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6** + **priority v2.9**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, **rule-stats + export/import rules JSON v2.7**, **webhook channel + bulk edit rules v2.8** (validasi format URL, persist terenkripsi, masking scheme://host, status per-item bulk, pipeline alert-callback-webhook dispatch), **webhook delivery log + settings export/import v2.9** (secret-safe: plaintext ditolak, blob enc:v1 tervalidasi kunci), loop housekeeping retensi yang membaca **override runtime** (kini juga prune delivery log), dan **regression guard selector CSS atribut hidden bentuk valid + wajib rule author [hidden] utk elemen flex + tolak unicode escape korup (v2.7-v2.9)**).
+**Status saat ini: 389 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure + **WebhookDispatcher v2.8**: payload test/alert, masking URL, dispatch sukses/gagal/timeout via transport injeksi; **v2.9 retry/backoff** dengan attempts + duration_ms), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6** + **priority v2.9**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, **rule-stats + export/import rules JSON v2.7**, **webhook channel + bulk edit rules v2.8** (validasi format URL, persist terenkripsi, masking scheme://host, status per-item bulk, pipeline alert-callback-webhook dispatch), **webhook delivery log + settings export/import v2.9** (secret-safe: plaintext ditolak, blob enc:v1 tervalidasi kunci), **webhook outbox + replay + health + rule-stats harian v2.10**, loop housekeeping retensi yang membaca **override runtime** (kini juga prune delivery log + outbox), dan **regression guard selector CSS atribut hidden bentuk valid + wajib rule author [hidden] utk elemen flex + tolak unicode escape korup (v2.7-v2.10)**).
 
 ---
 
@@ -354,6 +358,15 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
 - **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
 - **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
+
+### ✨ v2.10 — Webhook Outbox & Replay, Delivery Health, 7-Day Audit, URL Filter State
+- **📮 Webhook outbox (delivery gagal total tidak hilang lagi)** — alert yang gagal terkirim setelah semua percobaan retry kini masuk antrean persisten di tabel baru `webhook_outbox` (payload alert JSONB + rule/symbol + attempts + last_reason); di-replay **otomatis** oleh loop background tiap 5 menit (batch 20, siklus pertama 30 detik setelah start — antrean bertahan restart) atau **manual** via tombol **↻ Replay** di panel Outbox / aksi palette; sukses replay menghapus antrean + mencatat delivery log event `replay`, gagal tetap antre dengan counter attempts naik; endpoint `GET /api/webhook/outbox` (metadata saja — payload tidak pernah bocor ke dashboard) + `POST /api/webhook/outbox/replay` (maks 50 per panggilan, ringkasan sent/failed/remaining); antrean ikut di-prune bersama retensi alert_history agar basi tidak menumpuk
+- **♥️ Delivery health 24 jam** — kartu kesehatan di Webhook Channel: **success rate** (progress bar gradien merah→hijau dengan transisi animasi + warna nilai good/warn/bad), **delivered 24h**, **avg latency (ms)**, **avg attempts** — endpoint `GET /api/webhook/health` (agregasi satu-pass SQL atas `webhook_deliveries`, termasuk `outbox_pending`; fallback hasil terakhir in-memory saat DB down); kartu auto-refresh setelah test send & replay
+- **📈 Audit window 24h/7d** — segmented control baru di header Alert Rules: mode **7d** mengambil agregasi per-HARI via `?bucket=day` (`get_alert_rule_stats_daily`, 7 slot hari zero-filled, clamp 1..30) sehingga sparkline mingguan tetap terbaca (168 slot jam terlalu padat); label meta pakai chip `.win-tag` (7d/24h) tanpa duplikasi teks; tooltip bar menampilkan tanggal (MM-DD) di mode harian
+- **🔗 URL filter state (shareable)** — filter Alert History kini tersinkron ke URL query (`?priority=high&q=pepe`) via `history.replaceState` (tanpa spam history); reload/link share langsung memulihkan filter sebelum data dimuat — koordinasi prioritas server-side + pencarian client-side tetap berjalan
+- **🔧 Perbaikan test versi semver** — test lama membandingkan versi app sebagai STRING (`"2.10.0" >= "2.7.0"` = False secara leksikografis!) — kini di-parse ke tuple int agar bump versi 2-digit tidak mematahkan test
+- **🎨 Styling** — chip kesehatan dengan grid auto-fit + hover lift + tabular-nums, outbox panel border dashed amber + badge count + baris border-left amber (tanda antre) + tombol Replay mini dengan state disabled selama mengirim, seg control rounded dengan state aktif cyan + aria-pressed, layout mobile 2-kolom utk grid kesehatan + stack baris outbox, rule author `[hidden]` utk elemen flex/grid baru (guard regresi), footer v2.10
+- **+42 test baru** — DB outbox (enqueue + serialisasi JSON + truncation + clamp attempts, oldest-first + clamp limit, count, delete ANY($1), record attempt, prune 0-hari noop), DB health (parse agregasi + empty window + clamp 720), rule-stats harian (date_trunc day + clamp 30), endpoint rule-stats bucket=day (zero-fill 7 slot, key `day`, clamp 99→30, bucket invalid → hour, default hour unchanged), health endpoint (database + outbox_pending, fallback memory, nilai negatif di-clamp), outbox endpoint (shape tanpa payload leak), replay (not_configured, kosong, sukses → hapus + log event replay, mixed → gagal tetap antre + attempts naik + reason terakhir), pipeline (dispatch gagal → enqueue outbox dgn payload utuh, sukses → skip, replay loop sukses/gagal, not_configured noop, retensi prune outbox), guard HTML v2.10 (elemen, rule author hidden, wiring init restore-URL-sebelum-load, palette, unicode, footer) → total **389 tests**
 
 ### ✨ v2.9 — Webhook Delivery Log & Retry, History Search/Filter, Settings Export/Import
 - **🧾 Webhook delivery log (DB)** — setiap hasil pengiriman webhook (test manual maupun alert nyata) kini dicatat ke tabel baru `webhook_deliveries` (event, ok, status code, reason, jumlah attempts, durasi ms, rule, symbol — persisten, tahan restart, di-prune otomatis bersama retensi alert_history); endpoint `GET /api/webhook/deliveries?limit=1..200` (fallback in-memory saat DB down); UI panel **Delivery log** collapsible di Webhook Channel: titik status hijau/merah, chip event TEST/ALERT, kode status mono berwarna, detail attempts • durasi • symbol • rule, waktu relatif, counter badge, custom scrollbar, layout wrap di mobile

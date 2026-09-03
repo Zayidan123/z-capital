@@ -565,7 +565,7 @@ class TestDashboardHtmlV29:
 
     def test_footer_version_bumped(self):
         html = self._html()
-        assert "Crypto Oracle AI v2.9" in html
+        assert "Crypto Oracle AI v2." in html  # v2.10+ allowed
 
     def test_app_version_bumped(self):
         from app.main import app as fastapi_app

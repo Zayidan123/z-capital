@@ -1889,6 +1889,99 @@
         .wh-del-time { color: var(--muted); font-size: 0.68rem; flex: 0 0 auto; }
         .wh-del-empty { padding: 14px 12px; text-align: center; color: var(--muted); font-size: 0.75rem; }
 
+        /* ===== v2.10: Delivery health + outbox + audit window seg ===== */
+        .wh-health {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+            gap: 8px; margin-top: 12px;
+        }
+        .wh-health-chip {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 10px; padding: 9px 11px;
+            display: flex; flex-direction: column; gap: 5px;
+            transition: border-color 0.18s ease, transform 0.18s ease;
+        }
+        .wh-health-chip:hover { border-color: rgba(0, 217, 255, 0.45); transform: translateY(-1px); }
+        body.light .wh-health-chip { background: rgba(0, 149, 189, 0.04); }
+        .wh-health-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+        .wh-health-value { font-size: 0.98rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+        .wh-health-value.good { color: var(--success, #00ff88); }
+        .wh-health-value.warn { color: #ffb86b; }
+        .wh-health-value.bad { color: #ff7b7b; }
+        .wh-rate-bar {
+            display: block; height: 5px; border-radius: 3px; overflow: hidden;
+            background: rgba(255, 255, 255, 0.08);
+        }
+        body.light .wh-rate-bar { background: rgba(0, 0, 0, 0.08); }
+        .wh-rate-fill {
+            display: block; height: 100%; width: 0%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #ff7b7b 0%, #ffb86b 55%, #00ff88 100%);
+            transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .wh-outbox { margin-top: 10px; }
+        .wh-out-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 9px 12px; cursor: pointer; user-select: none;
+            background: rgba(255, 184, 107, 0.05);
+            border: 1px dashed rgba(255, 184, 107, 0.35); border-radius: 10px;
+            transition: background 0.16s ease, border-color 0.16s ease;
+        }
+        .wh-out-head:hover { background: rgba(255, 184, 107, 0.1); border-color: rgba(255, 184, 107, 0.6); }
+        body.light .wh-out-head { background: rgba(176, 108, 22, 0.06); border-color: rgba(176, 108, 22, 0.3); }
+        .wh-out-title { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+        .wh-out-count {
+            display: inline-block; min-width: 20px; text-align: center;
+            background: rgba(255, 184, 107, 0.18); color: #ffb86b;
+            border-radius: 999px; padding: 1px 7px; font-size: 0.68rem; font-weight: 700;
+        }
+        .wh-out-count.zero { background: rgba(255, 255, 255, 0.08); color: var(--muted); }
+        .wh-out-actions { display: inline-flex; align-items: center; gap: 8px; }
+        .btn-mini {
+            font-size: 0.68rem; padding: 4px 9px; border-radius: 7px;
+            background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text);
+            cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease;
+        }
+        .btn-mini:hover { border-color: var(--accent); color: var(--accent); }
+        .btn-mini:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .btn-mini:disabled { opacity: 0.55; cursor: wait; }
+        .wh-out-list {
+            margin-top: 6px; max-height: 220px; overflow-y: auto;
+            border: 1px solid var(--card-border); border-radius: 10px;
+        }
+        .wh-out-list::-webkit-scrollbar { width: 6px; }
+        .wh-out-list::-webkit-scrollbar-thumb { background: rgba(255, 184, 107, 0.4); border-radius: 3px; }
+        .wh-out-row {
+            display: flex; align-items: center; gap: 8px; padding: 7px 11px;
+            border-bottom: 1px solid var(--card-border); font-size: 0.72rem;
+            border-left: 3px solid rgba(255, 184, 107, 0.55);
+        }
+        body.light .wh-out-row { border-bottom-color: rgba(0, 0, 0, 0.04); }
+        .wh-out-row:hover { background: rgba(255, 184, 107, 0.05); }
+        .wh-out-row:last-child { border-bottom: none; }
+        .wh-out-sym { font-weight: 700; color: var(--text); min-width: 74px; }
+        .wh-out-meta { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+        .wh-out-time { color: var(--muted); font-size: 0.68rem; flex: 0 0 auto; }
+        .seg {
+            display: inline-flex; border: 1px solid var(--card-border); border-radius: 9px;
+            overflow: hidden; background: var(--card-bg);
+        }
+        .seg-btn {
+            border: none; background: transparent; color: var(--muted);
+            font-family: inherit; font-size: 0.72rem; font-weight: 600;
+            padding: 6px 12px; cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .seg-btn + .seg-btn { border-left: 1px solid var(--card-border); }
+        .seg-btn:hover { color: var(--text); }
+        .seg-btn.active { background: rgba(0, 217, 255, 0.14); color: var(--accent); }
+        body.light .seg-btn.active { background: rgba(0, 149, 189, 0.12); }
+        .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+        .rule-spark-meta .win-tag {
+            display: inline-block; font-size: 0.6rem; padding: 0 5px; border-radius: 5px;
+            background: rgba(0, 217, 255, 0.12); color: var(--accent);
+            vertical-align: 1px; margin-left: 4px;
+        }
+
         .hist-controls {
             display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         }
@@ -1927,7 +2020,16 @@
             .wh-del-row { flex-wrap: wrap; gap: 5px 8px; }
             .wh-del-detail { flex-basis: 100%; order: 5; white-space: normal; }
             .hist-search input { width: 140px; }
+            /* v2.10: health grid 2 kolom + outbox row stack */
+            .wh-health { grid-template-columns: repeat(2, 1fr); }
+            .wh-out-row { flex-wrap: wrap; gap: 4px 8px; }
+            .wh-out-meta { flex-basis: 100%; order: 5; white-space: normal; }
+            .wh-out-time { margin-left: auto; }
         }
+        /* v2.10: display:flex/grid menimpa rule UA [hidden] -> butuh rule
+           penutup eksplisit (kelas regresi bug backdrop v2.3 / bulk-bar v2.8) */
+        .wh-health[hidden] { display: none; }
+        .wh-out-list[hidden] { display: none; }
     </style>
 </head>
 <body>
@@ -2083,6 +2185,11 @@
                 <p data-i18n="rules.hint" style="color: var(--muted); font-size: 0.82rem; flex: 1; min-width: 220px;">
                     Atur ambang pemicu notifikasi. Perubahan berlaku langsung pada engine alert.
                 </p>
+                <!-- v2.10: toggle jendela audit sparkline (24 jam / 7 hari) -->
+                <div class="seg" id="audit-window-seg" role="group" aria-label="Audit window" title="Jendela waktu grafik audit per-rule">
+                    <button type="button" class="seg-btn active" data-window="24h" aria-pressed="true">24h</button>
+                    <button type="button" class="seg-btn" data-window="7d" aria-pressed="false">7d</button>
+                </div>
                 <label class="select-all-wrap" id="select-all-wrap" hidden title="Pilih semua rule yang bisa diedit (v2.8)">
                     <input type="checkbox" class="rule-check" id="rule-select-all" aria-label="Select all editable rules">
                     <span>All</span>
@@ -2199,6 +2306,39 @@
                     </div>
                     <div class="wh-del-list" id="wh-del-list" hidden>
                         <div class="wh-del-empty">No deliveries recorded yet.</div>
+                    </div>
+                </div>
+                <!-- v2.10: kesehatan delivery 24 jam (success rate + latensi) -->
+                <div class="wh-health" id="wh-health">
+                    <div class="wh-health-chip">
+                        <span class="wh-health-label">24h success</span>
+                        <span class="wh-health-value" id="wh-rate-value">—</span>
+                        <span class="wh-rate-bar" aria-hidden="true"><span class="wh-rate-fill" id="wh-rate-fill"></span></span>
+                    </div>
+                    <div class="wh-health-chip">
+                        <span class="wh-health-label">delivered 24h</span>
+                        <span class="wh-health-value" id="wh-total-value">—</span>
+                    </div>
+                    <div class="wh-health-chip">
+                        <span class="wh-health-label">avg latency</span>
+                        <span class="wh-health-value" id="wh-lat-value">—</span>
+                    </div>
+                    <div class="wh-health-chip">
+                        <span class="wh-health-label">avg attempts</span>
+                        <span class="wh-health-value" id="wh-att-value">—</span>
+                    </div>
+                </div>
+                <!-- v2.10: Outbox (delivery gagal total, bisa direplay) -->
+                <div class="wh-outbox" id="wh-outbox">
+                    <div class="wh-out-head" id="wh-out-head" role="button" tabindex="0" aria-expanded="false" aria-controls="wh-out-list" title="Alert yang gagal terkirim dan menunggu replay">
+                        <span class="wh-out-title">📮 Outbox <span class="wh-out-count zero" id="wh-out-count">0</span></span>
+                        <span class="wh-out-actions">
+                            <button type="button" class="btn-mini" id="wh-replay-btn" title="Coba kirim ulang semua alert dalam outbox">↻ Replay</button>
+                            <span class="wh-del-caret" aria-hidden="true">▼</span>
+                        </span>
+                    </div>
+                    <div class="wh-out-list" id="wh-out-list" hidden>
+                        <div class="wh-del-empty">Outbox empty - no failed deliveries waiting.</div>
                     </div>
                 </div>
             </div>
@@ -2353,7 +2493,7 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.9 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.10 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
                 <span><span class="kbd">Ctrl K</span> commands</span>
                 <span><span class="kbd">R</span> refresh</span>
@@ -3128,8 +3268,12 @@
         // ===== v2.3: Alert rules =====
         // v2.7: sparkline audit per-rule (jumlah alert/jam, window 24h)
         // v2.8: bar memakai class .bar + data-attrs utk custom tooltip
+        // v2.10: jendela audit 24h/7d (7d = bucket harian dari server)
+        let auditWindow = '24h'; // atau '7d'
+
         function renderRuleAudit(st) {
-            if (!st) return `<span class="rule-spark-meta never">no fire data (24h)</span>`;
+            if (!st) return `<span class="rule-spark-meta never">no fire data (${auditWindow === '7d' ? '7d' : '24h'})</span>`;
+            const isDay = auditWindow === '7d';
             const buckets = st.buckets || [];
             const maxC = Math.max(1, ...buckets.map(b => b.count || 0));
             const W = 122, Hh = 26;
@@ -3143,22 +3287,34 @@
                 const x = i * (bw + 1);
                 const y = Hh - h;
                 const op = (0.35 + 0.65 * (c / maxC)).toFixed(2);
-                const hh = escapeHtml(String(b.hour || '').slice(11, 16));
-                bars += `<rect class="bar" data-c="${c}" data-h="${hh}" x="${x}" y="${y}" width="${bw}" height="${h}" rx="1.5" fill="var(--accent)" fill-opacity="${op}" role="img" aria-label="${c} alert(s) at ${hh} UTC"></rect>`;
+                // v2.10: bucket harian pakai key 'day' (MM-DD), jam tetap HH:MM
+                const rawSlot = b.day || b.hour || '';
+                const hh = escapeHtml(isDay
+                    ? String(rawSlot).slice(5, 10)
+                    : String(rawSlot).slice(11, 16));
+                bars += `<rect class="bar" data-c="${c}" data-h="${hh}" x="${x}" y="${y}" width="${bw}" height="${h}" rx="1.5" fill="var(--accent)" fill-opacity="${op}" role="img" aria-label="${c} alert(s) at ${hh}"></rect>`;
             });
             const lastRel = st.last_fired ? relativeTime(st.last_fired) : 'never';
-            const meta = `<span class="rule-spark-meta"><strong>${st.total}</strong> fires/24h &bull; last: ${lastRel}</span>`;
-            if (!bars) return `<svg class="rule-spark" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="No alerts in last 24h"><text x="3" y="16" font-size="9" fill="var(--muted)">no fires in 24h</text></svg>${meta}`;
-            return `<svg class="rule-spark" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Alert frequency last 24h">${bars}</svg>${meta}`;
+            // v2.10: window hanya di chip .win-tag - tidak diduplikasi
+            // di teks "fires/x" (review screenshot: 'fires/7d7d' redundan)
+            const winTag = `<span class="win-tag">${isDay ? '7d' : '24h'}</span>`;
+            const meta = `<span class="rule-spark-meta"><strong>${st.total}</strong> fires ${winTag} &bull; last: ${lastRel}</span>`;
+            const emptyLabel = isDay ? 'No alerts in last 7 days' : 'No alerts in last 24h';
+            if (!bars) return `<svg class="rule-spark" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="${emptyLabel}"><text x="3" y="16" font-size="9" fill="var(--muted)">no fires (${isDay ? '7d' : '24h'})</text></svg>${meta}`;
+            return `<svg class="rule-spark" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Alert frequency last ${isDay ? '7 days' : '24 hours'}">${bars}</svg>${meta}`;
         }
 
         async function loadAlertRules() {
             const list = document.getElementById('rules-list');
             try {
                 // v2.7: rules + statistik fire per-rule dimuat paralel
+                // v2.10: jendela audit mengikuti toggle 24h/7d
+                const statsUrl = auditWindow === '7d'
+                    ? `${API_BASE}/api/alerts/rule-stats?hours=7&bucket=day`
+                    : `${API_BASE}/api/alerts/rule-stats?hours=24`;
                 const [res, statsRes] = await Promise.all([
                     fetch(`${API_BASE}/api/alerts/rules`),
-                    fetch(`${API_BASE}/api/alerts/rule-stats?hours=24`).catch(() => null),
+                    fetch(statsUrl).catch(() => null),
                 ]);
                 const data = await res.json();
                 if (data.status !== 'success') throw new Error(data.message || 'Failed to load rules');
@@ -3502,6 +3658,153 @@
             wrap.classList.toggle('open', opening);
             if (head) head.setAttribute('aria-expanded', opening ? 'true' : 'false');
             if (opening) loadWebhookDeliveries();
+        }
+
+        // ===== v2.10: Delivery health (24h) + Outbox (replay gagal) =====
+        async function loadWebhookHealth() {
+            const rate = document.getElementById('wh-rate-value');
+            const fill = document.getElementById('wh-rate-fill');
+            const total = document.getElementById('wh-total-value');
+            const lat = document.getElementById('wh-lat-value');
+            const att = document.getElementById('wh-att-value');
+            if (!rate || !fill) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/webhook/health?hours=24`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'health failed');
+                const h = data.data || {};
+                [rate, total, lat, att].forEach(el => {
+                    if (el) el.classList.remove('good', 'warn', 'bad');
+                });
+                if (h.total === 0) {
+                    rate.textContent = '—';
+                    total.textContent = '0';
+                    lat.textContent = '—';
+                    att.textContent = '—';
+                    fill.style.width = '0%';
+                } else {
+                    const sr = Number(h.success_rate || 0);
+                    rate.textContent = `${sr.toFixed(1)}%`;
+                    rate.classList.add(sr >= 90 ? 'good' : (sr >= 60 ? 'warn' : 'bad'));
+                    fill.style.width = `${Math.max(2, Math.min(100, sr))}%`;
+                    total.textContent = String(h.total);
+                    lat.textContent = h.avg_duration_ms != null ? `${h.avg_duration_ms}ms` : '—';
+                    att.textContent = h.avg_attempts != null ? `${h.avg_attempts}` : '—';
+                }
+            } catch (error) {
+                console.error('Webhook health error:', error);
+                rate.textContent = '!';
+                fill.style.width = '0%';
+            }
+        }
+
+        function renderOutboxRow(item) {
+            const row = document.createElement('div');
+            row.className = 'wh-out-row';
+            const parts = [];
+            if (item.attempts != null && Number(item.attempts) > 0) parts.push(`${item.attempts} tries`);
+            if (item.last_reason) parts.push(escapeHtml(String(item.last_reason)));
+            if (item.rule) parts.push(escapeHtml(item.rule));
+            row.innerHTML = `
+                <span class="wh-out-sym">${escapeHtml(item.symbol || '—')}</span>
+                <span class="wh-out-meta" title="${escapeHtml(parts.join(' • '))}">${escapeHtml(parts.join(' • ')) || 'queued'}</span>
+                <span class="wh-out-time">${item.queued_at ? relativeTime(item.queued_at) : '—'}</span>
+            `;
+            return row;
+        }
+
+        async function loadWebhookOutbox() {
+            const list = document.getElementById('wh-out-list');
+            const count = document.getElementById('wh-out-count');
+            if (!list || !count) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/webhook/outbox?limit=30`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'outbox failed');
+                const items = data.data || [];
+                count.textContent = String(items.length);
+                count.classList.toggle('zero', items.length === 0);
+                list.innerHTML = '';
+                if (!items.length) {
+                    list.innerHTML = '<div class="wh-del-empty">Outbox empty - no failed deliveries waiting.</div>';
+                    return;
+                }
+                items.forEach(it => list.appendChild(renderOutboxRow(it)));
+            } catch (error) {
+                console.error('Webhook outbox error:', error);
+                count.textContent = '!';
+                list.innerHTML = `<div class="wh-del-empty" style="color: var(--danger);">⚠️ ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        async function replayOutbox() {
+            const btn = document.getElementById('wh-replay-btn');
+            const orig = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '…'; }
+            try {
+                const res = await fetch(`${API_BASE}/api/webhook/outbox/replay`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'replay failed');
+                if (data.reason === 'not_configured') {
+                    toast('Set webhook_url first - outbox replay needs a destination', 'warn');
+                } else if (Number(data.replayed) === 0) {
+                    toast('Outbox is empty - nothing to replay', 'info');
+                } else {
+                    toast(`Replay: ${data.sent} sent, ${data.failed} still failing`, data.failed ? 'warn' : 'success');
+                    addLog(`Outbox replay: ${data.sent}/${data.replayed} delivered (${data.remaining} pending)`, 'info');
+                }
+                loadWebhookOutbox();
+                loadWebhookDeliveries();
+                loadWebhookHealth();
+            } catch (error) {
+                console.error('Outbox replay error:', error);
+                toast(`Replay failed: ${error.message}`, 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = orig; }
+            }
+        }
+
+        function toggleOutbox() {
+            const wrap = document.getElementById('wh-outbox');
+            const list = document.getElementById('wh-out-list');
+            const head = document.getElementById('wh-out-head');
+            if (!wrap || !list) return;
+            const opening = list.hidden;
+            list.hidden = !opening;
+            wrap.classList.toggle('open', opening);
+            if (head) head.setAttribute('aria-expanded', opening ? 'true' : 'false');
+            if (opening) loadWebhookOutbox();
+        }
+
+        // v2.10: URL state utk filter history (shareable via ?priority=&q=)
+        function syncHistoryToUrl() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                if (historyPriority) params.set('priority', historyPriority); else params.delete('priority');
+                if (historySearchText) params.set('q', historySearchText); else params.delete('q');
+                const qs = params.toString();
+                window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+            } catch (e) { /* URL state tidak kritis */ }
+        }
+
+        function restoreHistoryFromUrl() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const prio = (params.get('priority') || '').toLowerCase();
+                if (['high', 'medium', 'low'].includes(prio)) {
+                    historyPriority = prio;
+                    const sel = document.getElementById('history-priority');
+                    if (sel) sel.value = prio;
+                }
+                const q = (params.get('q') || '').trim();
+                if (q) {
+                    historySearchText = q.toLowerCase();
+                    const inp = document.getElementById('history-search');
+                    if (inp) inp.value = q;
+                    const wrap = document.getElementById('hist-search-wrap');
+                    if (wrap) wrap.classList.add('has-value');
+                }
+            } catch (e) { /* URL state tidak kritis */ }
         }
 
         // ===== v2.4: Alert history (persisten di DB + real-time via WS) =====
@@ -4548,6 +4851,7 @@
             document.getElementById('hist-search-wrap').classList.toggle('has-value', !!historySearchText);
             clearTimeout(historySearchTimer);
             historySearchTimer = setTimeout(applyHistoryTextFilter, 160);
+            syncHistoryToUrl(); // v2.10: shareable URL state
         });
         document.getElementById('history-search-clear').addEventListener('click', () => {
             historySearchInput.value = '';
@@ -4555,15 +4859,41 @@
             document.getElementById('hist-search-wrap').classList.remove('has-value');
             applyHistoryTextFilter();
             historySearchInput.focus();
+            syncHistoryToUrl(); // v2.10
         });
         document.getElementById('history-priority').addEventListener('change', (e) => {
             historyPriority = e.target.value;
             loadAlertHistory();
+            syncHistoryToUrl(); // v2.10
             addLog(historyPriority ? `History filter: priority=${historyPriority}` : 'History priority filter cleared');
         });
         document.getElementById('wh-del-head').addEventListener('click', toggleDeliveryLog);
         document.getElementById('wh-del-head').addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDeliveryLog(); }
+        });
+        // v2.10: outbox panel + replay button
+        document.getElementById('wh-out-head').addEventListener('click', (e) => {
+            if (e.target.closest && e.target.closest('#wh-replay-btn')) return; // klik replay jangan toggle
+            toggleOutbox();
+        });
+        document.getElementById('wh-out-head').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOutbox(); }
+        });
+        document.getElementById('wh-replay-btn').addEventListener('click', replayOutbox);
+        // v2.10: segmented control jendela audit (24h/7d)
+        document.querySelectorAll('#audit-window-seg .seg-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const win = btn.dataset.window === '7d' ? '7d' : '24h';
+                if (win === auditWindow) return;
+                auditWindow = win;
+                document.querySelectorAll('#audit-window-seg .seg-btn').forEach(b => {
+                    const active = b.dataset.window === auditWindow;
+                    b.classList.toggle('active', active);
+                    b.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+                loadAlertRules();
+                addLog(`Audit window: ${auditWindow}`);
+            });
         });
         document.getElementById('heatmap-grid').addEventListener('click', handleHeatmapClick);
         document.getElementById('heatmap-csv-btn').addEventListener('click', () => {
@@ -4786,6 +5116,10 @@
                 { icon: '\ud83e\udde9', label: 'Export settings JSON (full backup)', fn: () => { window.location.href = `${API_BASE}/api/settings/export`; toast('Settings JSON downloaded', 'success'); } },
                 { icon: '\ud83d\udd04', label: 'Import settings JSON (restore)', fn: openSettingsImportModal },
                 { icon: '\ud83e\uddfe', label: 'Toggle webhook delivery log', fn: toggleDeliveryLog },
+                { icon: '\ud83d\udcee', label: 'Replay failed webhook deliveries', fn: replayOutbox },
+                { icon: '\ud83d\udce4', label: 'Toggle webhook outbox panel', fn: toggleOutbox },
+                { icon: '\ud83d\udcc8', label: 'Toggle audit window (24h/7d)', fn: () => { const b = document.querySelector(`#audit-window-seg .seg-btn[data-window="${auditWindow === '7d' ? '24h' : '7d'}"]`); if (b) b.click(); } },
+                { icon: '\ud83d\udda5\ufe0f', label: 'Refresh webhook health + delivery log', fn: () => { loadWebhookHealth(); loadWebhookDeliveries(); toast('Webhook health refreshed', 'info'); } },
                 { icon: '\ud83d\udee1\ufe0f', label: 'Run security audit', fn: runSecurityAudit },
                 { icon: '\ud83c\udf10', label: 'Toggle language ID/EN', hint: 'L', fn: toggleLang },
             ];
@@ -4889,6 +5223,7 @@
             'settings.import.sub':   { en: 'Restore from a settings export JSON - secrets must be encrypted blobs', id: 'Pulihkan dari JSON export pengaturan - secret harus blob terenkripsi' },
             'settings.import.run':   { en: '\ud83d\udce5 Import Settings', id: '\ud83d\udce5 Impor Pengaturan' },
             'webhook.sub':    { en: 'POST JSON alert payloads to any HTTP endpoint', id: 'Kirim payload alert JSON ke endpoint HTTP apa pun' },
+            'audit.hint':     { en: 'Sparkline window:', id: 'Jendela sparkline:' },
         };
         function applyI18n() {
             document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -4926,6 +5261,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
             applyI18n(); // v2.7
+            restoreHistoryFromUrl(); // v2.10: filter dari URL sebelum load data
             wireSorting('signals-table', renderSignals);
             wireSorting('anomalies-table', renderAnomalies);
             connectWebSocket();
@@ -4935,6 +5271,8 @@
             loadTelegramStatus(); // v2.5
             loadWebhookStatus();  // v2.8
             loadWebhookDeliveries(); // v2.9: isi counter delivery log
+            loadWebhookHealth();  // v2.10: kartu kesehatan delivery
+            loadWebhookOutbox();  // v2.10: badge jumlah outbox
             loadSettings();       // v2.6
             loadNotifPref();      // v2.6
             updateOfflineBanner(); // v2.6
