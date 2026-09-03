@@ -4,6 +4,8 @@ Real-time Dashboard UI Module
 - WebSocket untuk real-time updates
 - HTML/CSS/JS frontend
 """
+import csv
+import io
 import json
 import asyncio
 import time
@@ -12,9 +14,10 @@ from typing import Dict, List, Any
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from app import database as app_database
 from app.database import get_recent_signals, get_system_stats
 from app.security.hardening import signal_validator, penetration_tester, dependency_auditor
 
@@ -114,6 +117,61 @@ async def security_audit():
                 "pentest": pentest_results
             }
         }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+@router.get("/api/anomalies")
+async def get_anomalies(limit: int = 50, symbol: str = None):
+    """API endpoint untuk daftar anomali volume terbaru"""
+    try:
+        # Batasi limit agar aman dari abuse
+        limit = max(1, min(limit, 500))
+        anomalies = await app_database.db.get_recent_anomalies(symbol=symbol, limit=limit)
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "count": len(anomalies),
+            "data": anomalies,
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+@router.get("/api/export/signals.csv")
+async def export_signals_csv(limit: int = 500):
+    """Export sinyal terbaru sebagai file CSV"""
+    try:
+        limit = max(1, min(limit, 5000))
+        signals = await get_recent_signals(limit=limit)
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        # Header
+        writer.writerow(["id", "symbol", "signal_type", "status", "timestamp", "message"])
+        for s in signals:
+            writer.writerow([
+                s.get("id", ""),
+                s.get("symbol", ""),
+                s.get("signal_type", ""),
+                s.get("status", ""),
+                s.get("timestamp", ""),
+                (s.get("message") or "").replace("\n", " "),
+            ])
+        buffer.seek(0)
+
+        filename = f"signals_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+        return StreamingResponse(
+            iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
     except Exception as e:
         return {
             "status": "error",

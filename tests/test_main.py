@@ -34,6 +34,17 @@ def client():
                 "timestamp": "2026-01-01T00:00:00+00:00",
             }
         ])
+        mock_global_db.get_recent_anomalies = AsyncMock(return_value=[
+            {
+                "id": 1,
+                "symbol": "BTCUSDT",
+                "price": 50000.0,
+                "volume_spike": 450.0,
+                "volume_current": 1000.0,
+                "volume_avg": 180.0,
+                "timestamp": "2026-01-01T00:00:00+00:00",
+            }
+        ])
         mock_global_db.get_system_stats = AsyncMock(return_value={
             "total_signals": 1,
             "signals_24h": 1,
@@ -121,3 +132,42 @@ class TestDashboardRoutes:
         data = response.json()
         assert data["status"] == "success"
         assert data["validation"]["symbol"] == "BTCUSDT"
+
+    def test_anomalies_endpoint(self, client):
+        """Endpoint baru: daftar anomali volume terbaru"""
+        response = client.get("/dashboard/api/anomalies")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["count"] == 1
+        assert data["data"][0]["symbol"] == "BTCUSDT"
+        assert data["data"][0]["volume_spike"] == 450.0
+
+    def test_anomalies_endpoint_with_symbol_filter(self, client):
+        response = client.get("/dashboard/api/anomalies", params={"symbol": "ETHUSDT", "limit": 10})
+        assert response.status_code == 200
+        # Verifikasi filter & limit diteruskan ke DB
+        from app.database import db as global_db
+        kwargs = global_db.get_recent_anomalies.call_args.kwargs
+        assert kwargs.get("symbol") == "ETHUSDT"
+        assert kwargs.get("limit") == 10
+
+    def test_export_signals_csv(self, client):
+        """Endpoint baru: export sinyal ke CSV"""
+        response = client.get("/dashboard/api/export/signals.csv")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/csv")
+        assert "attachment" in response.headers["content-disposition"]
+        body = response.text
+        lines = body.strip().splitlines()
+        assert lines[0] == "id,symbol,signal_type,status,timestamp,message"
+        assert "BTCUSDT" in lines[1]
+
+    def test_stats_endpoint_contains_system_meta(self, client):
+        """Stats harus menyertakan metrik sistem untuk meta cards"""
+        response = client.get("/dashboard/api/stats")
+        data = response.json()
+        system = data["data"]["system"]
+        assert "total_anomalies" in system
+        assert "smart_wallets_count" in system
+        assert "total_signals" in system

@@ -60,6 +60,29 @@ class CryptoOracleApp:
         """Uptime aplikasi dalam jam"""
         return round((time.monotonic() - self.started_at) / 3600, 2)
 
+    async def _stats_broadcast_loop(self, interval: int = 30) -> None:
+        """Broadcast statistik terbaru ke semua dashboard client secara periodik.
+
+        Sebelumnya dashboard hanya refresh via polling HTTP; kini stats juga
+        didorong otomatis lewat WebSocket sehingga semua client sinkron.
+        """
+        from app.ui.routes import get_dashboard_stats
+
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    stats = await get_dashboard_stats()
+                    await broadcast_update({
+                        "type": "stats_update",
+                        "timestamp": _utc_now().isoformat(),
+                        "data": stats.get("data") if stats.get("status") == "success" else None,
+                    })
+                except Exception as e:
+                    logger.debug(f"Stats broadcast skipped: {e}")
+        except asyncio.CancelledError:
+            logger.debug("Stats broadcast loop cancelled")
+
     async def initialize(self) -> None:
         """Initialize all components"""
         logger.info("Initializing Crypto Oracle AI...")
@@ -204,6 +227,9 @@ async def lifespan(app: FastAPI):
 
     # Start the main application as a tracked background task
     app_instance._spawn_background_task(app_instance.run())
+
+    # Dorong stats terbaru ke dashboard via WebSocket setiap 30 detik
+    app_instance._spawn_background_task(app_instance._stats_broadcast_loop(30))
 
     yield
 

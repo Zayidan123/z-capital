@@ -170,9 +170,11 @@ docker compose logs -f app
 | `/docs` | GET | Swagger UI documentation |
 | `/dashboard/` | GET | Dashboard real-time monitoring |
 | `/dashboard/api/stats` | GET | Statistik sistem & sinyal terbaru |
+| `/dashboard/api/anomalies` | GET | Daftar anomali volume terbaru (support `?limit=` & `?symbol=`) |
+| `/dashboard/api/export/signals.csv` | GET | Export sinyal ke file CSV (support `?limit=`) |
 | `/dashboard/api/security/audit` | GET | Jalankan audit keamanan (dependency scan + pentest) |
 | `/dashboard/api/signals/validate/{symbol}` | GET | Validasi sinyal multi-layer untuk symbol |
-| `/dashboard/ws/updates` | WebSocket | Update real-time (anomaly, signal, stats) |
+| `/dashboard/ws/updates` | WebSocket | Update real-time (anomaly, signal, stats auto-push tiap 30s) |
 
 ---
 
@@ -201,7 +203,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 68 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, dan seluruh endpoint FastAPI).
+**Status saat ini: 87 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, dan seluruh endpoint FastAPI termasuk anomalies & CSV export).
 
 ---
 
@@ -282,8 +284,16 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **Validasi settings** dengan `Field(ge=..., gt=...)` untuk port/threshold
 
 ### 🧪 Test Suite Baru
-- 68 test dengan mocking penuh (Postgres, HTTP, Telegram di-mock) — berjalan cepat & deterministik di CI
+- 87 test dengan mocking penuh (Postgres, HTTP, Telegram di-mock) — berjalan cepat & deterministik di CI
 - Mencakup: config validation, database CRUD (mock pool), volume tracker delta logic, pattern recognizer, sentiment analyzer, whale tracker, signal validator, penetration tester, dependency auditor, dan semua endpoint dashboard
+
+### ✨ v2.1 — Dashboard Overhaul & Fitur Baru
+- **Tabel Recent Volume Anomalies** — monitor anomali langsung dari dashboard (endpoint `/api/anomalies` baru)
+- **Export CSV** — unduh riwayat sinyal via `/api/export/signals.csv`
+- **Sortable tables** — klik header kolom untuk sorting (symbol, price, spike, time)
+- **Auto-refresh toggle + tombol refresh manual**
+- **Stats auto-push via WebSocket** tiap 30 detik dari server (semua client sinkron tanpa polling)
+- **Styling overhaul**: connection badge dinamis (LIVE/RECONNECTING/OFFLINE), jam live WIB di header, skeleton loading shimmer, card accent per-metrik, scrollbar custom, favicon, mobile responsive penuh, dukungan `prefers-reduced-motion`
 
 ---
 
