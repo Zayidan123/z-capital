@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.8
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.9
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-308%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-347%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -73,7 +73,7 @@ z-capital/
 │   ├── notifier.py       # Telegram bot notifications
 │   ├── logging_config.py # Structured logging (JSON + console)
 │   └── main.py           # Orchestrator + FastAPI app
-├── tests/                # Test suite lengkap (308 tests, semua mock - tanpa DB/network)
+├── tests/                # Test suite lengkap (347 tests, semua mock - tanpa DB/network)
 ├── scripts/deploy.sh     # Deployment helper
 ├── Dockerfile            # Multi-stage build, non-root user, healthcheck
 ├── docker-compose.yml    # PostgreSQL + Redis (optional) + App
@@ -193,8 +193,9 @@ docker compose logs -f app
 | `/dashboard/api/alerts/rules/import` | POST | **v2.7** Bulk import threshold rules dari JSON export (status per-item: `updated`/`unknown`/`not_editable`/`invalid_threshold` — satu item jelek tidak menggagalkan batch) |
 | `/dashboard/api/alerts/rules/bulk` | POST | **v2.8** Terapkan SATU threshold ke banyak rule sekaligus (body `{"names": [1..50 nama], "threshold": >= 0}`; status per-item konsisten dgn import; NaN/Infinity/negatif ditolak 400) |
 | `/dashboard/api/webhook/status` | GET | **v2.8** Status channel webhook (flag configured, host tersamarkan `scheme://host` - path/query TIDAK pernah bocor, hasil delivery terakhir) |
-| `/dashboard/api/webhook/test` | POST | **v2.8** Kirim payload test JSON ke webhook terkonfigurasi (gagal delivery = hasil `sent:false` + reason, bukan error endpoint) |
-| `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`; **v2.6 filter `?symbol=` & `?hours=`** untuk click-to-filter, `?limit=1..200`) |
+| `/dashboard/api/webhook/test` | POST | **v2.8** Kirim payload test JSON ke webhook terkonfigurasi (gagal delivery = hasil `sent:false` + reason, bukan error endpoint; **v2.9** hasil dicatat ke delivery log + field `attempts`) |
+| `/dashboard/api/webhook/deliveries` | GET | **v2.9** Log delivery webhook terbaru dari DB (event/ok/status_code/reason/attempts/duration_ms/rule/symbol, `?limit=1..200`; fallback in-memory saat DB down) |
+| `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`; **v2.6 filter `?symbol=` & `?hours=`**, **v2.9 `?priority=`** high/medium/low — cocok untuk data `HIGH` maupun `high` via LOWER, `?limit=1..200`) |
 | `/dashboard/api/alerts/heatmap` | GET | Agregasi alert per-symbol per-jam untuk heat map (`?hours=6..168`) |
 | `/dashboard/api/alerts/heatmap.csv` | GET | **v2.6** Export agregasi heat map sebagai CSV (`?hours=6..168`; kolom symbol/hour/alert_count/severity) |
 | `/dashboard/api/settings` | GET | **v2.6** Runtime settings: nilai efektif, default, batasan, flag override/persisted — secret tidak pernah dikembalikan |
@@ -203,6 +204,8 @@ docker compose logs -f app
 | `/dashboard/api/telegram/status` | GET | Status notifikasi Telegram (flag configured, username bot, chat id tersamarkan — **tanpa token**) |
 | `/dashboard/api/telegram/test` | POST | Kirim pesan test ke Telegram (response `sent` + `reason`, gagal kirim = hasil bukan error) |
 | `/dashboard/api/settings` | PUT | **v2.6** Terapkan + persist runtime settings (int di-clamp dengan warning; token Telegram diverifikasi ke API lalu disimpan terenkripsi Fernet) |
+| `/dashboard/api/settings/export` | GET | **v2.9** Export SEMUA runtime settings sebagai JSON attachment — secret hanya diekspor sebagai blob terenkripsi `enc:v1` (plaintext TIDAK pernah keluar), int bernilai efektif |
+| `/dashboard/api/settings/import` | POST | **v2.9** Restore settings dari file export (status per-item: `applied`/`secret_applied`/`rejected`/`undecryptable`/`invalid_value`/`unknown_key`; **secret plaintext ditolak**, blob kunci instance lain ditolak; webhook_url langsung dipasang ke dispatcher) |
 | `/dashboard/manifest.webmanifest` | GET | **v2.6** PWA manifest (install dashboard ke homescreen; ikon 192/512) |
 | `/dashboard/api/backtest/{symbol}` | POST | Backtest strategi volume-spike (body `{"days": 1..90, "volume_threshold": 10..10000}`) |
 | `/dashboard/api/export/signals.csv` | GET | Export sinyal ke file CSV (support `?limit=`) |
@@ -216,7 +219,7 @@ docker compose logs -f app
 >
 > 🧹 **Retensi alert_history (v2.5)**: baris lebih tua dari `ALERT_HISTORY_RETENTION_DAYS` (default 7, 0 = off) dihapus otomatis oleh loop background tiap `ALERT_RETENTION_INTERVAL_MINUTES` (default 60). **v2.6**: nilai env dapat dioverride dari dashboard (System Settings) dan loop membaca override tiap siklus. Prune manual tersedia via tombol **Prune Now** di dashboard atau `POST /dashboard/api/alerts/prune`.
 >
-> ⚙️ **Runtime settings (v2.6)**: ubah konfigurasi tanpa restart via panel **System Settings** (tersimpan di tabel `app_settings`, bertahan restart). Key yang tersedia: `alert_history_retention_days` (0–365), `dashboard_refresh_seconds` (10–600), `anomaly_feed_limit` (10–200), plus konfigurasi Telegram runtime (`telegram_bot_token` dienkripsi Fernet dengan kunci derivasi dari `DASHBOARD_SECRET_SALT`/DATABASE_URL — write-only, tidak pernah dikirim balik ke browser; `telegram_chat_id`). Nilai selain default ditandai badge **override**.
+> ⚙️ **Runtime settings (v2.6)**: ubah konfigurasi tanpa restart via panel **System Settings** (tersimpan di tabel `app_settings`, bertahan restart). Key yang tersedia: `alert_history_retention_days` (0–365), `dashboard_refresh_seconds` (10–600), `anomaly_feed_limit` (10–200), plus konfigurasi Telegram runtime (`telegram_bot_token` dienkripsi Fernet dengan kunci derivasi dari `DASHBOARD_SECRET_SALT`/DATABASE_URL — write-only, tidak pernah dikirim balik ke browser; `telegram_chat_id`). Nilai selain default ditandai badge **override**. **v2.9**: seluruh settings bisa di-backup/restore via tombol **Export/Import** (JSON; secret tetap terenkripsi dalam file — file export hanya bisa dibuka instance dengan kunci yang sama).
 
 ---
 
@@ -230,6 +233,7 @@ docker compose logs -f app
 | `alert_rules` | Threshold alert rules yang diubah via dashboard (**survive restart**, v2.4) |
 | `alert_history` | Riwayat alert ter-trigger (rule, priority, symbol, data JSONB — persisten v2.4; auto-prune via retensi v2.5) |
 | `app_settings` | Runtime settings key-value (v2.6): retensi, refresh interval, feed limit, konfigurasi Telegram (secret terenkripsi) — survive restart |
+| `webhook_deliveries` | Log hasil pengiriman webhook (v2.9): event test/alert, ok, status code, reason, jumlah attempts (retry), durasi, rule/symbol — audit tahan restart, di-prune bersama retensi alert_history |
 
 ---
 
@@ -248,7 +252,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 308 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure + **WebhookDispatcher v2.8**: payload test/alert, masking URL, dispatch sukses/gagal/timeout via transport injeksi), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, **rule-stats + export/import rules JSON v2.7**, **webhook channel + bulk edit rules v2.8** (validasi format URL, persist terenkripsi, masking scheme://host, status per-item bulk, pipeline alert-callback-webhook dispatch), loop housekeeping retensi yang membaca **override runtime**, dan **regression guard selector CSS atribut hidden bentuk valid + wajib rule author [hidden] utk elemen flex (v2.7/v2.8)**).
+**Status saat ini: 347 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure + **WebhookDispatcher v2.8**: payload test/alert, masking URL, dispatch sukses/gagal/timeout via transport injeksi; **v2.9 retry/backoff** dengan attempts + duration_ms), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6** + **priority v2.9**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, **rule-stats + export/import rules JSON v2.7**, **webhook channel + bulk edit rules v2.8** (validasi format URL, persist terenkripsi, masking scheme://host, status per-item bulk, pipeline alert-callback-webhook dispatch), **webhook delivery log + settings export/import v2.9** (secret-safe: plaintext ditolak, blob enc:v1 tervalidasi kunci), loop housekeeping retensi yang membaca **override runtime** (kini juga prune delivery log), dan **regression guard selector CSS atribut hidden bentuk valid + wajib rule author [hidden] utk elemen flex + tolak unicode escape korup (v2.7-v2.9)**).
 
 ---
 
@@ -350,6 +354,15 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
 - **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
 - **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
+
+### ✨ v2.9 — Webhook Delivery Log & Retry, History Search/Filter, Settings Export/Import
+- **🧾 Webhook delivery log (DB)** — setiap hasil pengiriman webhook (test manual maupun alert nyata) kini dicatat ke tabel baru `webhook_deliveries` (event, ok, status code, reason, jumlah attempts, durasi ms, rule, symbol — persisten, tahan restart, di-prune otomatis bersama retensi alert_history); endpoint `GET /api/webhook/deliveries?limit=1..200` (fallback in-memory saat DB down); UI panel **Delivery log** collapsible di Webhook Channel: titik status hijau/merah, chip event TEST/ALERT, kode status mono berwarna, detail attempts • durasi • symbol • rule, waktu relatif, counter badge, custom scrollbar, layout wrap di mobile
+- **🔁 Retry + backoff** — `WebhookDispatcher` kini mencoba ulang pengiriman gagal hingga `max_attempts` (default 3, clamp 1..5) dengan jeda backoff linear (`backoff_seconds * attempt`); hasil dispatch mencatat `attempts` + `duration_ms`; sukses di percobaan mana pun berhenti seketika — kegagalan webhook tetap tidak pernah memengaruhi pipeline alert
+- **🔍 Filter & pencarian Alert History** — input **search** (client-side, debounce 160ms) menyaring item yang sudah dirender berdasarkan symbol/rule, tombol clear muncul saat aktif, empty state khusus "No alerts match"; dropdown **priority** (all/high/medium/low) memfilter server-side via `?priority=` (dicocokkan `LOWER(priority)` sehingga data lama `HIGH` maupun baru `high` sama-sama cocok); filter live juga berlaku untuk alert baru yang masuk via WebSocket
+- **🧩 Settings export/import (full backup)** — tombol **Export** mengunduh SEMUA runtime settings sebagai JSON (`zcapital_settings_<stamp>.json`): int bernilai efektif, secret **hanya sebagai blob terenkripsi `enc:v1`** (plaintext tidak pernah keluar — file aman disimpan/dibagikan); tombol **Import** + modal (file picker atau paste JSON) menjalankan restore dengan status per-item: `applied`/`secret_applied`/`rejected` (secret plaintext ditolak eksplisit) /`undecryptable` (blob kunci instance lain) /`invalid_value`/`unknown_key`; webhook_url langsung dipasang ke dispatcher runtime, telegram config tersimpan dan diterapkan saat startup berikutnya (tanpa verifikasi jaringan saat import)
+- **🐛 Fix unicode escape korup (sejak v2.8, terlihat via QA visual)** — 3 escape `\ud83d\dd25` (kehilangan `u`) membuat judul **Alert Heat Map** tampil literal "dd25" (EN/ID) dan ikon palette "Export heat map CSV" rusak; diperbaiki + guard test baru yang memindai seluruh HTML dan menolak escape `\u` tidak valid agar kelas korupsi tooling ini tidak lolos lagi
+- **🎨 Styling** — panel delivery log dengan border rounded + header hover + caret rotasi + scrollbar tipis cyan, baris delivery dengan dot glow + chip event uppercase + kode mono berwarna (hijau/merah), search input dengan ikon + focus-ring cyan + tombol clear inline, select priority konsisten dengan filter-select lain, tombol Export/Import di toolbar System Settings (stack di mobile), modal import settings reuse pattern rules import, footer v2.9
+- **+39 test baru** — DB delivery log (insert + truncation + clamp limit + prune + parse DELETE), filter priority SQL, dispatcher retry (sukses langsung, sukses setelah retry, gagal habis percobaan, clamp max_attempts, not_configured attempts=0), endpoint deliveries (empty, serialisasi timestamp, fallback memory tanpa bocor URL), test-send tercatat ke DB, history priority endpoint (valid/invalid/combined), export (shape + attachment + tanpa plaintext + secret belum persist tidak ikut + nilai int efektif), import (ints applied + persist, unknown/invalid, **plaintext secret ditolak**, blob enc:v1 applied + dispatcher terpasang, blob rusak undecryptable, **roundtrip export-import-restore**, kosong 422), pipeline alert-dispatch-delivery log, retensi ikut prune delivery log, guard HTML v2.9 (elemen, wiring, i18n, footer, rule [hidden] flex, **tolak unicode escape korup**) → total **347 tests**
 
 ### ✨ v2.8 — Webhook Alert Channel, Bulk Edit Rules & Sparkline Tooltip
 - **🔗 Channel notifikasi webhook** — alert ter-trigger kini bisa dikirim sebagai JSON POST ke endpoint HTTP arbitrary: `WebhookDispatcher` di `app/notifier.py` (timeout ketat 10s, hasil `{ok, status_code, reason}`, TIDAK pernah raise — kegagalan webhook tidak pernah memengaruhi pipeline utama), dipanggil fire-and-forget dari callback alert (`main._broadcast_alert`); URL dikonfigurasi via runtime settings (`webhook_url`, write-only + **terenkripsi Fernet**, tervalidasi format http/https + host saat apply), di-restore otomatis saat restart (best-effort); payload `{source, type: alert.triggered|alert.test, timestamp, alert:{rule, priority, symbol, channels, data}}` + header `X-ZCapital-Event`; UI panel Webhook Channel di Notification Settings (chip endpoint tersamarkan **scheme://host** — path sering berisi token rahasia, chip hasil delivery terakhir, form apply, tombol Send Test Payload), endpoint `GET /api/webhook/status` + `POST /api/webhook/test`; aksi palette "Send webhook test payload"

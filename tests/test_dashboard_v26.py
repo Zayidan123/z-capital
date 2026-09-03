@@ -511,7 +511,7 @@ class TestFilterCsvManifest:
         )
         body = resp.json()
         assert body["status"] == "success"
-        assert body["filters"] == {"symbol": "PEPEUSDT", "hours": 12}
+        assert body["filters"] == {"symbol": "PEPEUSDT", "hours": 12, "priority": None}
         kwargs = v26_client._v26_mock_db.get_alert_history.await_args.kwargs
         assert kwargs["symbol"] == "PEPEUSDT"
         assert kwargs["hours"] == 12
@@ -520,7 +520,7 @@ class TestFilterCsvManifest:
     def test_history_endpoint_without_filters(self, v26_client):
         resp = v26_client.get("/dashboard/api/alerts/history")
         body = resp.json()
-        assert body["filters"] == {"symbol": None, "hours": None}
+        assert body["filters"] == {"symbol": None, "hours": None, "priority": None}
 
     def test_heatmap_csv_content(self, v26_client):
         v26_client._v26_mock_db.get_alert_heatmap = AsyncMock(return_value=[

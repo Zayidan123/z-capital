@@ -28,10 +28,12 @@ from app.database import get_recent_signals, get_system_stats
 from app.dashboard import AlertSystem, BacktestEngine
 from app.notifier import WebhookDispatcher, mask_webhook_url
 from app.runtime_settings import (
+    SETTING_SPECS,
     SPECS_BY_KEY,
     build_settings_payload,
     defaults_from_env,
     encrypt_secret,
+    get_overrides,
     is_encrypted,
     decrypt_secret,
     load_overrides,
@@ -203,6 +205,26 @@ class SettingsUpdateRequest(BaseModel):
         description="Peta key -> nilai baru. Secret dikirim plaintext lalu "
                     "dienkripsi sebelum disimpan.",
     )
+
+
+class SettingsImportItem(BaseModel):
+    """Satu setting dalam body POST /api/settings/import (v2.9).
+
+    - int/str: value plaintext (divalidasi sesuai spec).
+    - secret: HANYA menerima blob terenkripsi (encoding='enc:v1') dari
+      file export. Plaintext secret ditolak eksplisit agar file import
+      tidak menjadi jalur penyelundupan secret baru.
+    """
+    key: str = Field(min_length=1, max_length=100)
+    value: str = Field(min_length=1, max_length=20000)
+    encoding: Optional[str] = Field(
+        default=None, description="'enc:v1' bila value adalah blob terenkripsi"
+    )
+
+
+class SettingsImportRequest(BaseModel):
+    """Body POST /api/settings/import (v2.9)"""
+    settings: List[SettingsImportItem] = Field(min_length=1, max_length=100)
 
 # Path template relatif terhadap file ini (bukan hard-coded /app)
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -714,6 +736,7 @@ async def get_alert_history(
     limit: int = 25,
     symbol: Optional[str] = None,
     hours: Optional[int] = None,
+    priority: Optional[str] = None,
 ):
     """Riwayat alert yang pernah ter-trigger.
 
@@ -722,26 +745,38 @@ async def get_alert_history(
     start dengan flag "source" yang sesuai.
     v2.6: filter opsional `symbol` (exact) dan `hours` (jendela waktu)
     untuk click-to-filter dari heat map.
+    v2.9: filter opsional `priority` (high/medium/low, exact).
     """
     try:
         limit = max(1, min(limit, 200))
         symbol_f = (symbol or None) if symbol is None else str(symbol).strip().upper() or None
         hours_f = max(1, min(int(hours), 720)) if hours else None
+        priority_f = None
+        if priority:
+            p = str(priority).strip().lower()
+            priority_f = p if p in ("high", "medium", "low") else None
         try:
             history = await app_database.db.get_alert_history(
-                limit=limit, symbol=symbol_f, hours=hours_f
+                limit=limit, symbol=symbol_f, hours=hours_f, priority=priority_f
             )
             source = "database"
         except Exception as db_err:
             logger.warning(f"Alert history DB unavailable, using memory: {db_err}")
             history = get_alert_system().get_alert_history(limit=limit)
             source = "memory"
+            if priority_f:
+                history = [
+                    h for h in history
+                    if str(h.get("priority", "")).lower() == priority_f
+                ]
         return {
             "status": "success",
             "timestamp": _utc_now_iso(),
             "source": source,
             "count": len(history),
-            "filters": {"symbol": symbol_f, "hours": hours_f},
+            "filters": {
+                "symbol": symbol_f, "hours": hours_f, "priority": priority_f,
+            },
             "data": history,
         }
     except Exception as e:
@@ -1006,6 +1041,8 @@ async def webhook_test():
 
     Pengiriman gagal dianggap HASIL (bukan error endpoint): response
     tetap status=success dengan sent=false + reason.
+    v2.9: hasil test dicatat ke tabel webhook_deliveries (audit tahan
+    restart) - kegagalan logging tidak mengubah hasil endpoint.
     """
     dispatcher = get_webhook()
     if dispatcher is None or not getattr(dispatcher, "url", None):
@@ -1017,11 +1054,24 @@ async def webhook_test():
         }
     try:
         result = await dispatcher.test_send()
+        # v2.9: catat delivery test ke DB (best-effort)
+        try:
+            await app_database.db.log_webhook_delivery(
+                event="test",
+                ok=bool(result.get("ok")),
+                status_code=result.get("status_code"),
+                reason=result.get("reason"),
+                attempts=int(result.get("attempts") or 1),
+                duration_ms=result.get("duration_ms"),
+            )
+        except Exception as log_err:  # noqa: BLE001
+            logger.debug(f"Webhook delivery log failed: {log_err}")
         return {
             "status": "success",
             "sent": bool(result.get("ok")),
             "status_code": result.get("status_code"),
             "reason": result.get("reason"),
+            "attempts": result.get("attempts"),
             "message": (
                 "Test payload delivered - webhook responded 2xx."
                 if result.get("ok") else
@@ -1031,6 +1081,63 @@ async def webhook_test():
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Webhook test failed: {e}")
         return {"status": "success", "sent": False, "reason": "error", "message": str(e)}
+
+
+@router.get("/api/webhook/deliveries", dependencies=API_DEPS)
+async def get_webhook_deliveries(limit: int = 50):
+    """Log delivery webhook terbaru (v2.9).
+
+    Sumber utama tabel webhook_deliveries di DB (terbaru dulu). Bila DB
+    tidak tersedia, fallback satu entri hasil terakhir in-memory dari
+    dispatcher agar panel tetap menampilkan sesuatu yang jujur.
+    URL webhook TIDAK pernah disertakan - hanya metadata delivery.
+    """
+    try:
+        limit_f = max(1, min(int(limit), 200))
+        try:
+            rows = await app_database.db.get_webhook_deliveries(limit=limit_f)
+            source = "database"
+        except Exception as db_err:
+            logger.warning(f"Webhook deliveries DB unavailable: {db_err}")
+            dispatcher = get_webhook()
+            last = getattr(dispatcher, "last_result", None) if dispatcher else None
+            rows = ([{
+                "id": 0,
+                "event": "unknown",
+                "ok": bool(last.get("ok")) if last else False,
+                "status_code": last.get("status_code") if last else None,
+                "reason": last.get("reason") if last else "no_delivery_yet",
+                "attempts": last.get("attempts") if last else None,
+                "duration_ms": last.get("duration_ms") if last else None,
+                "rule": None,
+                "symbol": None,
+                "created_at": None,
+            }] if last else [])
+            source = "memory"
+        deliveries = []
+        for row in rows:
+            created = row.get("created_at")
+            deliveries.append({
+                "id": row.get("id"),
+                "event": row.get("event"),
+                "ok": bool(row.get("ok")),
+                "status_code": row.get("status_code"),
+                "reason": row.get("reason"),
+                "attempts": row.get("attempts"),
+                "duration_ms": row.get("duration_ms"),
+                "rule": row.get("rule"),
+                "symbol": row.get("symbol"),
+                "timestamp": created.isoformat() if hasattr(created, "isoformat") else created,
+            })
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "source": source,
+            "count": len(deliveries),
+            "data": deliveries,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 # ===== v2.6: Runtime settings (GET/PUT) =====
@@ -1180,6 +1287,173 @@ async def update_runtime_settings(body: SettingsUpdateRequest):
     return {
         "status": "success",
         "timestamp": _utc_now_iso(),
+        "results": results,
+    }
+
+
+# ===== v2.9: Settings export/import (full backup, secret-safe) =====
+
+@router.get("/api/settings/export", dependencies=API_DEPS)
+async def export_runtime_settings():
+    """Export SEMUA runtime settings sebagai file JSON (v2.9).
+
+    Keamanan:
+    - Secret TIDAK PERNAH diekspor sebagai plaintext. Bila secret pernah
+      di-persist, yang disertakan adalah blob terenkripsi (enc:v1:...)
+      beserta flag encoding - file tetap aman dibagikan/disimpan.
+    - Nilai int mencakup nilai efektif (override atau default env).
+    """
+    from fastapi.responses import JSONResponse
+
+    try:
+        try:
+            db_values = await app_database.db.get_app_settings()
+        except Exception as db_err:
+            logger.warning(f"Settings export DB unavailable: {db_err}")
+            db_values = {}
+        cache = get_overrides()
+
+        items: List[Dict[str, Any]] = []
+        for spec in SETTING_SPECS:
+            key = spec["key"]
+            if spec["type"] == "secret":
+                stored = db_values.get(key)
+                if stored:
+                    items.append({
+                        "key": key,
+                        "value": stored,
+                        "encoding": "enc:v1" if is_encrypted(stored) else "unknown",
+                    })
+                continue
+            # int: nilai efektif (override > default env) agar file export
+            # langsung mencerminkan konfigurasi berjalan.
+            raw = cache.get(key)
+            value = raw if raw is not None else str(
+                defaults_from_env().get(key, spec.get("default"))
+            )
+            items.append({"key": key, "value": str(value), "encoding": None})
+
+        payload = {
+            "kind": "zcapital.settings_export",
+            "version": 1,
+            "exported_at": _utc_now_iso(),
+            "secret_encoding": "enc:v1",
+            "note": (
+                "Secrets are exported as encrypted blobs (enc:v1) - they "
+                "can only be decrypted by an instance using the same "
+                "DASHBOARD_SECRET_SALT/DATABASE_URL."
+            ),
+            "settings": items,
+        }
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        return StreamingResponse(
+            iter([json.dumps(payload, indent=2)]),
+            media_type="application/json",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="zcapital_settings_{stamp}.json"'
+            },
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=200,
+            content={"status": "error", "message": str(e)},
+        )
+
+
+@router.post("/api/settings/import", dependencies=API_DEPS)
+async def import_runtime_settings(body: SettingsImportRequest):
+    """Import settings dari file export (v2.9).
+
+    Status per-item (bukan 422 batch) agar satu entri jelek tidak
+    menggagalkan restore:
+    - applied        : int/str valid -> persist + cache (+ side-effect)
+    - secret_applied : blob enc:v1 valid utk kunci instance ini
+    - rejected       : secret plaintext (harus lewat form write-only)
+    - undecryptable  : blob terenkripsi tapi tidak bisa dibuka kunci ini
+    - invalid_value  : int tidak valid / secret kosong
+    - unknown_key    : key tidak ada di SETTING_SPECS
+
+    Side-effect runtime: webhook_url langsung dipasang ke dispatcher.
+    telegram_* TIDAK diverifikasi ke Telegram di sini (tanpa jaringan);
+    konfigurasi tersimpan diterapkan saat startup berikutnya atau lewat
+    form Notification Settings.
+    """
+    results: Dict[str, Any] = {}
+    applied_chat_id = False
+    for item in body.settings:
+        key = item.key
+        spec = SPECS_BY_KEY.get(key)
+        if spec is None:
+            results[key] = {"ok": False, "status": "unknown_key"}
+            continue
+
+        # Secret: hanya menerima blob terenkripsi dari file export
+        if spec["type"] == "secret":
+            if not item.encoding:
+                results[key] = {
+                    "ok": False,
+                    "status": "rejected",
+                    "warning": "plaintext secret not accepted - use the form",
+                }
+                continue
+            if item.encoding != "enc:v1" or not is_encrypted(item.value):
+                results[key] = {
+                    "ok": False,
+                    "status": "undecryptable",
+                    "warning": "unsupported encoding (expected enc:v1)",
+                }
+                continue
+            if decrypt_secret(item.value) is None:
+                results[key] = {
+                    "ok": False,
+                    "status": "undecryptable",
+                    "warning": "encrypted with a different instance key",
+                }
+                continue
+            try:
+                await app_database.db.set_app_setting(key, item.value)
+                from app import runtime_settings as _rs
+                _rs._cache[key] = item.value
+                if key == "telegram_chat_id":
+                    applied_chat_id = True
+                if key == "webhook_url":
+                    set_webhook(WebhookDispatcher(url=decrypt_secret(item.value)))
+                results[key] = {"ok": True, "status": "secret_applied"}
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Failed to persist imported setting {key}: {e}")
+                results[key] = {"ok": False, "status": "error", "warning": str(e)}
+            continue
+
+        # int/str: validasi spec seperti PUT biasa
+        check = validate_value(spec, item.value)
+        if not check["ok"]:
+            results[key] = {"ok": False, "status": "invalid_value",
+                            "warning": check["warning"]}
+            continue
+        try:
+            await app_database.db.set_app_setting(key, check["value"])
+            from app import runtime_settings as _rs
+            _rs._cache[key] = check["value"]
+            results[key] = {
+                "ok": True,
+                "status": "applied",
+                "warning": check["warning"],
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Failed to persist imported setting {key}: {e}")
+            results[key] = {"ok": False, "status": "error", "warning": str(e)}
+
+    summary: Dict[str, Any] = {
+        "total": len(body.settings),
+        "applied": sum(1 for r in results.values() if r.get("ok")),
+        "failed": sum(1 for r in results.values() if not r.get("ok")),
+        "telegram_chat_id_restored": applied_chat_id,
+    }
+    return {
+        "status": "success",
+        "timestamp": _utc_now_iso(),
+        "summary": summary,
         "results": results,
     }
 

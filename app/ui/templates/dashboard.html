@@ -1117,6 +1117,9 @@
             transition: transform 0.15s ease, border-color 0.15s ease;
         }
         .history-item:hover { transform: translateX(3px); }
+        /* v2.9: display:flex menimpa rule UA [hidden] -> butuh rule penutup
+           level author agar pencarian history bisa benar-benar menyembunyikan */
+        .history-item[hidden] { display: none; }
         .history-item.prio-high { border-left-color: var(--danger); }
         .history-item.prio-medium { border-left-color: var(--amber); }
         .history-item.prio-low { border-left-color: var(--accent); }
@@ -1820,13 +1823,110 @@
         }
         .webhook-sub { color: var(--muted); font-size: 0.75rem; }
 
+        /* ===== v2.9: Delivery log + history search + settings export/import ===== */
+        .wh-delivery {
+            margin-top: 2px;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            background: rgba(0, 217, 255, 0.025);
+            overflow: hidden;
+        }
+        body.light .wh-delivery { background: rgba(0, 149, 189, 0.03); }
+        .wh-del-head {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; padding: 8px 12px;
+            cursor: pointer; user-select: none;
+            transition: background 0.15s ease;
+        }
+        .wh-del-head:hover { background: rgba(0, 217, 255, 0.06); }
+        .wh-del-title {
+            font-size: 0.78rem; font-weight: 700; color: var(--text);
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .wh-del-count {
+            font-size: 0.68rem; color: var(--muted);
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            padding: 1px 8px; border-radius: 999px; font-weight: 600;
+        }
+        .wh-del-caret {
+            transition: transform 0.2s ease; color: var(--muted); font-size: 0.7rem;
+        }
+        .wh-delivery.open .wh-del-caret { transform: rotate(180deg); }
+        .wh-del-list {
+            max-height: 220px; overflow-y: auto;
+            border-top: 1px dashed var(--card-border);
+            scrollbar-width: thin; scrollbar-color: rgba(0, 217, 255, 0.35) transparent;
+        }
+        .wh-del-list[hidden] { display: none; }
+        .wh-del-list::-webkit-scrollbar { width: 6px; }
+        .wh-del-list::-webkit-scrollbar-thumb { background: rgba(0, 217, 255, 0.35); border-radius: 3px; }
+        .wh-del-row {
+            display: flex; align-items: center; gap: 9px;
+            padding: 7px 12px; font-size: 0.74rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            transition: background 0.14s ease;
+        }
+        body.light .wh-del-row { border-bottom-color: rgba(0, 0, 0, 0.04); }
+        .wh-del-row:hover { background: rgba(0, 217, 255, 0.05); }
+        .wh-del-row:last-child { border-bottom: none; }
+        .wh-dot {
+            width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+            background: var(--success, #2ecc71); box-shadow: 0 0 6px rgba(46, 204, 113, 0.55);
+        }
+        .wh-dot.fail { background: #ff5252; box-shadow: 0 0 6px rgba(255, 82, 82, 0.55); }
+        .wh-del-event {
+            font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--muted);
+            border: 1px solid var(--card-border); border-radius: 5px;
+            padding: 1px 6px; flex: 0 0 auto;
+        }
+        .wh-del-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.72rem; color: var(--accent); min-width: 52px;
+        }
+        .wh-del-code.fail { color: #ff7b7b; }
+        .wh-del-detail { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+        .wh-del-time { color: var(--muted); font-size: 0.68rem; flex: 0 0 auto; }
+        .wh-del-empty { padding: 14px 12px; text-align: center; color: var(--muted); font-size: 0.75rem; }
+
+        .hist-controls {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        }
+        .hist-search {
+            position: relative; display: inline-flex; align-items: center;
+        }
+        .hist-search input {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            color: var(--text); border-radius: 9px;
+            padding: 7px 10px 7px 30px; font-family: inherit;
+            font-size: 0.78rem; width: 190px;
+            transition: border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+        .hist-search input:focus {
+            outline: none; border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.14);
+        }
+        .hist-search .hs-icon {
+            position: absolute; left: 10px; font-size: 0.72rem;
+            color: var(--muted); pointer-events: none;
+        }
+        .hist-search input::placeholder { color: var(--muted); opacity: 0.75; }
+        .hist-clear-btn {
+            border: none; background: none; color: var(--muted); cursor: pointer;
+            font-size: 0.8rem; padding: 4px; margin-left: -26px; z-index: 1;
+            display: none;
+        }
+        .hist-clear-btn:hover { color: var(--text); }
+        .hist-search.has-value .hist-clear-btn { display: inline; }
+
+        .settings-actions { display: inline-flex; gap: 6px; }
+        .settings-import-status.ok { color: var(--success, #2ecc71); }
+        .settings-import-status.err { color: #ff7b7b; }
+
         @media (max-width: 640px) {
-            .rule-audit { min-width: 100%; flex-direction: row; align-items: center; gap: 12px; }
-            .palette-backdrop { padding-top: 6vh; }
-            .import-actions { justify-content: stretch; }
-            .import-actions .btn { flex: 1; }
-            .bulk-bar { align-items: stretch; flex-direction: column; }
-            .bulk-bar .btn { width: 100%; }
+            .wh-del-row { flex-wrap: wrap; gap: 5px 8px; }
+            .wh-del-detail { flex-basis: 100%; order: 5; white-space: normal; }
+            .hist-search input { width: 140px; }
         }
     </style>
 </head>
@@ -2091,6 +2191,16 @@
                 <div>
                     <button class="btn btn-ghost" id="wh-test-btn" title="Kirim payload test ke webhook">🔗 Send Test Payload</button>
                 </div>
+                <!-- v2.9: Delivery log (audit tahan restart, tersimpan di DB) -->
+                <div class="wh-delivery" id="wh-delivery">
+                    <div class="wh-del-head" id="wh-del-head" role="button" tabindex="0" aria-expanded="false" aria-controls="wh-del-list" title="Klik untuk buka/tutup log delivery">
+                        <span class="wh-del-title">🧾 Delivery log <span class="wh-del-count" id="wh-del-count">0</span></span>
+                        <span class="wh-del-caret">▼</span>
+                    </div>
+                    <div class="wh-del-list" id="wh-del-list" hidden>
+                        <div class="wh-del-empty">No deliveries recorded yet.</div>
+                    </div>
+                </div>
             </div>
             <button class="btn" id="tg-test-btn">📨 Send Test Message</button>
         </div>
@@ -2105,6 +2215,20 @@
         </div>
         <div class="card">
             <div class="history-toolbar">
+                <div class="hist-controls">
+                    <!-- v2.9: pencarian teks + filter priority -->
+                    <span class="hist-search" id="hist-search-wrap">
+                        <span class="hs-icon" aria-hidden="true">🔍</span>
+                        <input type="search" id="history-search" placeholder="Search symbol / rule…" aria-label="Search alert history" autocomplete="off">
+                        <button class="hist-clear-btn" id="history-search-clear" aria-label="Clear search" title="Clear search">✕</button>
+                    </span>
+                    <select class="filter-select" id="history-priority" aria-label="Filter by priority">
+                        <option value="">All priorities</option>
+                        <option value="high">🔴 High</option>
+                        <option value="medium">🟠 Medium</option>
+                        <option value="low">🔵 Low</option>
+                    </select>
+                </div>
                 <p class="history-hint">
                     Riwayat alert yang ter-trigger, tersimpan persisten di database
                     dan tetap ada meskipun aplikasi direstart. Alert baru masuk
@@ -2209,6 +2333,11 @@
             <span data-i18n="title.settings">⚙️ System Settings</span>
             <span class="toolbar">
                 <span class="last-updated" id="settings-updated"></span>
+                <!-- v2.9: backup/restore seluruh settings -->
+                <span class="settings-actions">
+                    <button class="btn btn-ghost" id="settings-export-btn" title="Unduh semua settings runtime sebagai JSON (secret tetap terenkripsi)">⬇️ Export</button>
+                    <button class="btn btn-ghost" id="settings-import-btn" title="Restore settings dari file export JSON">⬆️ Import</button>
+                </span>
                 <button class="btn btn-ghost" id="settings-refresh-btn" title="Muat ulang settings runtime (S)">🔄 Reload</button>
             </span>
         </div>
@@ -2224,7 +2353,7 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.8 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.9 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
                 <span><span class="kbd">Ctrl K</span> commands</span>
                 <span><span class="kbd">R</span> refresh</span>
@@ -2326,6 +2455,29 @@
                 <div class="import-actions">
                     <span class="import-status" id="import-status">Format: full export object, bare array, or {rules:[…]}</span>
                     <button class="btn" id="import-submit-btn" data-i18n="import.run">📥 Import Rules</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Import Modal (v2.9) -->
+    <div class="modal-backdrop" id="settings-import-modal" hidden role="dialog" aria-modal="true" aria-labelledby="settings-import-title">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div>
+                    <span class="modal-symbol" id="settings-import-title" data-i18n="settings.import.title">⬆️ Import Settings</span>
+                    <div class="modal-sub" data-i18n="settings.import.sub">Restore from a settings export JSON - secrets must be encrypted blobs</div>
+                </div>
+                <button class="modal-close" id="settings-import-close" aria-label="Close settings import modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="import-file-row">
+                    <input type="file" id="settings-import-file" accept=".json,application/json" aria-label="Pick settings JSON file" />
+                </div>
+                <textarea class="import-textarea" id="settings-import-textarea" rows="10" spellcheck="false" placeholder='{"kind":"zcapital.settings_export","settings":[{"key":"dashboard_refresh_seconds","value":"60","encoding":null}]}'></textarea>
+                <div class="import-actions">
+                    <span class="import-status settings-import-status" id="settings-import-status">Format: {kind:"zcapital.settings_export", settings:[…]} or bare array</span>
+                    <button class="btn" id="settings-import-submit-btn" data-i18n="settings.import.run">📥 Import Settings</button>
                 </div>
             </div>
         </div>
@@ -3286,12 +3438,70 @@
                     addLog(`Webhook test result: ${data.reason || 'failed'}`, 'warn');
                 }
                 loadWebhookStatus();
+                loadWebhookDeliveries();
             } catch (error) {
                 console.error('Webhook test error:', error);
                 toast(`Webhook test failed: ${error.message}`, 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = orig; }
             }
+        }
+
+        // ===== v2.9: Webhook delivery log (audit tahan restart) =====
+        function renderDeliveryRow(d) {
+            const ok = !!d.ok;
+            const row = document.createElement('div');
+            row.className = 'wh-del-row';
+            const code = d.status_code != null ? d.status_code : (d.reason || '—');
+            const parts = [];
+            if (d.attempts != null && Number(d.attempts) > 1) parts.push(`${d.attempts} attempts`);
+            if (d.duration_ms != null) parts.push(`${d.duration_ms}ms`);
+            if (d.symbol) parts.push(escapeHtml(d.symbol));
+            if (d.rule) parts.push(escapeHtml(d.rule));
+            const detail = parts.join(' • ') || (d.reason || '');
+            row.innerHTML = `
+                <span class="wh-dot${ok ? '' : ' fail'}" aria-hidden="true"></span>
+                <span class="wh-del-event">${escapeHtml(d.event || 'event')}</span>
+                <span class="wh-del-code${ok ? '' : ' fail'}">${escapeHtml(String(code))}</span>
+                <span class="wh-del-detail" title="${escapeHtml(detail)}">${escapeHtml(detail)}</span>
+                <span class="wh-del-time">${d.timestamp ? relativeTime(d.timestamp) : '—'}</span>
+            `;
+            return row;
+        }
+
+        async function loadWebhookDeliveries() {
+            const list = document.getElementById('wh-del-list');
+            const count = document.getElementById('wh-del-count');
+            if (!list) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/webhook/deliveries?limit=30`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'delivery log failed');
+                const items = data.data || [];
+                if (count) count.textContent = String(items.length);
+                list.innerHTML = '';
+                if (!items.length) {
+                    list.innerHTML = '<div class="wh-del-empty">No deliveries recorded yet.</div>';
+                    return;
+                }
+                items.forEach(d => list.appendChild(renderDeliveryRow(d)));
+            } catch (error) {
+                console.error('Webhook deliveries error:', error);
+                if (count) count.textContent = '!';
+                list.innerHTML = `<div class="wh-del-empty" style="color: var(--danger);">⚠️ ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        function toggleDeliveryLog() {
+            const wrap = document.getElementById('wh-delivery');
+            const list = document.getElementById('wh-del-list');
+            const head = document.getElementById('wh-del-head');
+            if (!wrap || !list) return;
+            const opening = list.hidden;
+            list.hidden = !opening;
+            wrap.classList.toggle('open', opening);
+            if (head) head.setAttribute('aria-expanded', opening ? 'true' : 'false');
+            if (opening) loadWebhookDeliveries();
         }
 
         // ===== v2.4: Alert history (persisten di DB + real-time via WS) =====
@@ -3360,6 +3570,9 @@
 
         // ===== v2.6: history filter (dikendalikan dari heat map) =====
         let historyFilter = { symbol: null, hours: null };
+        // v2.9: filter teks (client-side) + priority (server-side)
+        let historyPriority = '';
+        let historySearchText = '';
 
         function updateHistoryFilterChip() {
             const chip = document.getElementById('history-filter-chip');
@@ -3385,12 +3598,42 @@
             }
         }
 
+        // v2.9: filter teks client-side atas item yang sudah dirender
+        function historyItemMatchesSearch(item) {
+            if (!historySearchText) return true;
+            const sym = item.querySelector('.hist-symbol');
+            const rule = item.querySelector('.hist-rule');
+            const hay = `${sym ? sym.textContent : ''} ${rule ? rule.textContent : ''}`.toLowerCase();
+            return hay.includes(historySearchText);
+        }
+
+        function applyHistoryTextFilter() {
+            const list = document.getElementById('history-list');
+            if (!list) return;
+            let visible = 0;
+            list.querySelectorAll('.history-item').forEach(item => {
+                const match = historyItemMatchesSearch(item);
+                item.hidden = !match;
+                if (match) visible++;
+            });
+            const empty = list.querySelector('.hist-empty');
+            if (!visible && !empty) {
+                const noMatch = document.createElement('div');
+                noMatch.className = 'hist-empty';
+                noMatch.innerHTML = `<span class="he-icon">🔍</span>No alerts match "${escapeHtml(historySearchText)}".`;
+                list.appendChild(noMatch);
+            } else if (visible && empty && empty.textContent.includes('match')) {
+                empty.remove();
+            }
+        }
+
         async function loadAlertHistory() {
             const list = document.getElementById('history-list');
             try {
                 const qs = new URLSearchParams({ limit: '30' });
                 if (historyFilter.symbol) qs.set('symbol', historyFilter.symbol);
                 if (historyFilter.hours) qs.set('hours', String(historyFilter.hours));
+                if (historyPriority) qs.set('priority', historyPriority);
                 const res = await fetch(`${API_BASE}/api/alerts/history?${qs}`);
                 const data = await res.json();
                 if (data.status !== 'success') throw new Error(data.message || 'Failed to load history');
@@ -3399,7 +3642,7 @@
 
                 list.innerHTML = '';
                 if (!items.length) {
-                    const filtered = historyFilter.symbol || historyFilter.hours;
+                    const filtered = historyFilter.symbol || historyFilter.hours || historyPriority;
                     list.innerHTML = `
                         <div class="hist-empty"><span class="he-icon">📭</span>
                         ${filtered ? 'No alerts match the active filter.' : 'No alerts triggered yet — rules are monitored in real-time.'}
@@ -3407,6 +3650,7 @@
                 } else {
                     items.forEach(alert => list.appendChild(renderHistoryItem(alert)));
                 }
+                applyHistoryTextFilter();
                 updateHistoryFilterChip();
                 document.getElementById('history-updated').textContent =
                     `Updated ${new Date().toLocaleTimeString()}`;
@@ -3426,6 +3670,8 @@
             if (empty) empty.remove();
             const item = renderHistoryItem(alert, true);
             list.insertBefore(item, list.firstChild);
+            // v2.9: hormati filter teks aktif juga untuk item live
+            item.hidden = !historyItemMatchesSearch(item);
             // Batasi tampilan ke 60 item agar DOM tetap ringan
             while (list.children.length > 60) {
                 list.removeChild(list.lastChild);
@@ -4294,6 +4540,31 @@
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBrowserNotif(); }
         });
         document.getElementById('history-filter-chip').addEventListener('click', () => clearHistoryFilter());
+        // v2.9: wiring pencarian history + filter priority + delivery log
+        const historySearchInput = document.getElementById('history-search');
+        let historySearchTimer = null;
+        historySearchInput.addEventListener('input', () => {
+            historySearchText = historySearchInput.value.trim().toLowerCase();
+            document.getElementById('hist-search-wrap').classList.toggle('has-value', !!historySearchText);
+            clearTimeout(historySearchTimer);
+            historySearchTimer = setTimeout(applyHistoryTextFilter, 160);
+        });
+        document.getElementById('history-search-clear').addEventListener('click', () => {
+            historySearchInput.value = '';
+            historySearchText = '';
+            document.getElementById('hist-search-wrap').classList.remove('has-value');
+            applyHistoryTextFilter();
+            historySearchInput.focus();
+        });
+        document.getElementById('history-priority').addEventListener('change', (e) => {
+            historyPriority = e.target.value;
+            loadAlertHistory();
+            addLog(historyPriority ? `History filter: priority=${historyPriority}` : 'History priority filter cleared');
+        });
+        document.getElementById('wh-del-head').addEventListener('click', toggleDeliveryLog);
+        document.getElementById('wh-del-head').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDeliveryLog(); }
+        });
         document.getElementById('heatmap-grid').addEventListener('click', handleHeatmapClick);
         document.getElementById('heatmap-csv-btn').addEventListener('click', () => {
             window.location.href = `${API_BASE}/api/alerts/heatmap.csv?hours=${heatmapHours}`;
@@ -4391,6 +4662,101 @@
         });
         document.getElementById('rules-import-btn').addEventListener('click', openImportModal);
 
+        // ===== v2.9: Export/Import settings penuh (backup restore, secret-safe) =====
+        const settingsImportModal = document.getElementById('settings-import-modal');
+        function openSettingsImportModal() {
+            settingsImportModal.hidden = false;
+            requestAnimationFrame(() => settingsImportModal.classList.add('open'));
+            setTimeout(() => document.getElementById('settings-import-textarea').focus(), 80);
+        }
+        function closeSettingsImportModal() {
+            settingsImportModal.classList.remove('open');
+            setTimeout(() => { settingsImportModal.hidden = true; }, 220);
+        }
+        document.getElementById('settings-import-close').addEventListener('click', closeSettingsImportModal);
+        settingsImportModal.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeSettingsImportModal();
+        });
+        document.getElementById('settings-export-btn').addEventListener('click', () => {
+            window.location.href = `${API_BASE}/api/settings/export`;
+            addLog('Settings exported (JSON backup, secrets tetap terenkripsi)');
+            toast('Settings JSON downloaded', 'success');
+        });
+        document.getElementById('settings-import-btn').addEventListener('click', openSettingsImportModal);
+        document.getElementById('settings-import-file').addEventListener('change', (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                document.getElementById('settings-import-textarea').value = String(reader.result || '');
+                toast(`File loaded: ${f.name}`, 'info');
+            };
+            reader.readAsText(f);
+        });
+
+        async function submitSettingsImport() {
+            const ta = document.getElementById('settings-import-textarea');
+            const status = document.getElementById('settings-import-status');
+            status.className = 'import-status settings-import-status';
+            let parsed;
+            try {
+                parsed = JSON.parse(ta.value);
+            } catch (err) {
+                status.textContent = `\u274c Invalid JSON: ${err.message}`;
+                status.classList.add('err');
+                toast('Import failed: invalid JSON', 'error');
+                return;
+            }
+            let items = Array.isArray(parsed)
+                ? parsed
+                : (parsed && Array.isArray(parsed.settings) ? parsed.settings : null);
+            if (!items || !items.length) {
+                status.textContent = '\u274c No settings list found (need {settings:[\u2026]} or [\u2026])';
+                status.classList.add('err');
+                return;
+            }
+            const cleaned = items
+                .map(s => ({
+                    key: String((s && s.key) || '').trim(),
+                    value: String((s && s.value) == null ? '' : (s && s.value)),
+                    encoding: (s && s.encoding) || null,
+                }))
+                .filter(s => s.key);
+            if (!cleaned.length) {
+                status.textContent = '\u274c No valid items (each needs key + value)';
+                status.classList.add('err');
+                return;
+            }
+            const btn = document.getElementById('settings-import-submit-btn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/api/settings/import`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings: cleaned }),
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Import failed');
+                const sum = data.summary || {};
+                const applied = sum.applied || 0;
+                const failed = sum.failed || 0;
+                status.textContent = `\u2705 ${applied} applied, ${failed} skipped/failed`;
+                status.classList.add('ok');
+                toast(`Settings import: ${applied} applied, ${failed} skipped`, applied ? 'success' : 'warn');
+                addLog(`Settings import: ${applied} applied / ${failed} skipped`, 'info');
+                loadSettings();
+                loadWebhookStatus();
+            } catch (err) {
+                console.error('Settings import error:', err);
+                status.textContent = `\u274c ${err.message}`;
+                status.classList.add('err');
+                toast(`Import failed: ${err.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        document.getElementById('settings-import-submit-btn').addEventListener('click', submitSettingsImport);
+
         // ===== v2.7: Command palette (Ctrl+K) =====
         const paletteBackdrop = document.getElementById('palette-backdrop');
         const paletteInput = document.getElementById('palette-input');
@@ -4414,9 +4780,12 @@
                 { icon: '\u2705', label: 'Apply bulk threshold to selected rules', fn: () => { const b = document.getElementById('bulk-bar'); if (b && !b.hidden) applyBulkThreshold(); else toast('Select rules first (checkbox on each rule)', 'warn'); } },
                 { icon: '\ud83d\udda5\ufe0f', label: 'Toggle browser notifications', hint: 'N', fn: toggleBrowserNotif },
                 { icon: '\ud83d\udcc4', label: 'Export signals CSV', fn: () => { window.location.href = `${API_BASE}/api/export/signals.csv`; toast('Signals CSV downloaded', 'success'); } },
-                { icon: '\ud83d\dd25', label: 'Export heat map CSV', fn: () => { window.location.href = `${API_BASE}/api/alerts/heatmap.csv?hours=${heatmapHours}`; toast('Heat map CSV downloaded', 'success'); } },
+                { icon: '\ud83d\udd25', label: 'Export heat map CSV', fn: () => { window.location.href = `${API_BASE}/api/alerts/heatmap.csv?hours=${heatmapHours}`; toast('Heat map CSV downloaded', 'success'); } },
                 { icon: '\ud83d\udccb', label: 'Export alert rules JSON', fn: () => { window.location.href = `${API_BASE}/api/alerts/rules/export`; toast('Rules JSON downloaded', 'success'); } },
                 { icon: '\u2b06\ufe0f', label: 'Import alert rules JSON', fn: openImportModal },
+                { icon: '\ud83e\udde9', label: 'Export settings JSON (full backup)', fn: () => { window.location.href = `${API_BASE}/api/settings/export`; toast('Settings JSON downloaded', 'success'); } },
+                { icon: '\ud83d\udd04', label: 'Import settings JSON (restore)', fn: openSettingsImportModal },
+                { icon: '\ud83e\uddfe', label: 'Toggle webhook delivery log', fn: toggleDeliveryLog },
                 { icon: '\ud83d\udee1\ufe0f', label: 'Run security audit', fn: runSecurityAudit },
                 { icon: '\ud83c\udf10', label: 'Toggle language ID/EN', hint: 'L', fn: toggleLang },
             ];
@@ -4507,7 +4876,7 @@
             'title.rules':    { en: '\ud83d\udd14 Alert Rules', id: '\ud83d\udd14 Aturan Alert' },
             'title.notif':    { en: '\ud83d\udce8 Notification Settings', id: '\ud83d\udce8 Pengaturan Notifikasi' },
             'title.history':  { en: '\ud83d\udea8 Alert History', id: '\ud83d\udea8 Riwayat Alert' },
-            'title.heatmap':  { en: '\ud83d\dd25 Alert Heat Map', id: '\ud83d\dd25 Peta Panas Alert' },
+            'title.heatmap':  { en: '\ud83d\udd25 Alert Heat Map', id: '\ud83d\udd25 Peta Panas Alert' },
             'title.retention':{ en: '\ud83e\uddf9 Data Retention', id: '\ud83e\uddf9 Retensi Data' },
             'title.settings': { en: '\u2699\ufe0f System Settings', id: '\u2699\ufe0f Pengaturan Sistem' },
             'title.audit':    { en: '\ud83d\udee1\ufe0f Security Audit', id: '\ud83d\udee1\ufe0f Audit Keamanan' },
@@ -4516,6 +4885,9 @@
             'import.title':   { en: '\u2b06\ufe0f Import Alert Rules', id: '\u2b06\ufe0f Impor Aturan Alert' },
             'import.sub':     { en: 'Paste exported JSON below, or pick a .json file', id: 'Tempel JSON export di bawah, atau pilih file .json' },
             'import.run':     { en: '\ud83d\udce5 Import Rules', id: '\ud83d\udce5 Impor Rules' },
+            'settings.import.title': { en: '\u2b06\ufe0f Import Settings', id: '\u2b06\ufe0f Impor Pengaturan' },
+            'settings.import.sub':   { en: 'Restore from a settings export JSON - secrets must be encrypted blobs', id: 'Pulihkan dari JSON export pengaturan - secret harus blob terenkripsi' },
+            'settings.import.run':   { en: '\ud83d\udce5 Import Settings', id: '\ud83d\udce5 Impor Pengaturan' },
             'webhook.sub':    { en: 'POST JSON alert payloads to any HTTP endpoint', id: 'Kirim payload alert JSON ke endpoint HTTP apa pun' },
         };
         function applyI18n() {
@@ -4546,6 +4918,7 @@
             if (e.key === 'Escape') {
                 if (paletteOpen) { e.preventDefault(); closePalette(); return; }
                 if (!importModal.hidden) { e.preventDefault(); closeImportModal(); return; }
+                if (!settingsImportModal.hidden) { e.preventDefault(); closeSettingsImportModal(); return; }
             }
         });
 
@@ -4561,6 +4934,7 @@
             loadAlertHistory();
             loadTelegramStatus(); // v2.5
             loadWebhookStatus();  // v2.8
+            loadWebhookDeliveries(); // v2.9: isi counter delivery log
             loadSettings();       // v2.6
             loadNotifPref();      // v2.6
             updateOfflineBanner(); // v2.6

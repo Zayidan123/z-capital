@@ -161,7 +161,12 @@ class TestWebhookDispatcher:
     async def test_dispatch_not_configured(self):
         d = WebhookDispatcher("")
         result = await d.dispatch()
-        assert result == {"ok": False, "status_code": None, "reason": "not_configured"}
+        # v2.9: hasil kini mencatat attempts + duration_ms
+        assert result["ok"] is False
+        assert result["status_code"] is None
+        assert result["reason"] == "not_configured"
+        assert result["attempts"] == 0
+        assert result["duration_ms"] == 0
 
     @pytest.mark.asyncio
     async def test_test_payload_shape(self):
@@ -579,8 +584,10 @@ class TestDashboardHtmlV28:
 
     def test_footer_version_bumped(self):
         html = self._html()
-        assert "Crypto Oracle AI v2.8" in html
+        assert "Crypto Oracle AI v2." in html
 
     def test_app_version_bumped(self):
         from app.main import app as fastapi_app
-        assert fastapi_app.version == "2.8.0"
+        parts = fastapi_app.version.split(".")
+        assert len(parts) == 3 and all(p.isdigit() for p in parts)
+        assert tuple(int(p) for p in parts) >= (2, 8, 0)

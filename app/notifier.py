@@ -3,7 +3,9 @@ Notification channels for Crypto Oracle AI
 - TelegramNotifier: sends trading signals to Telegram
 - WebhookDispatcher: posts alert payloads to an arbitrary HTTP endpoint (v2.8)
 """
+import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from urllib.parse import urlsplit
@@ -45,11 +47,22 @@ class WebhookDispatcher:
     - dispatch() fire-and-forget friendly: timeout ketat (10s) + hasil
       berupa dict {ok, status_code, reason}; TIDAK pernah raise.
     - transport bisa diinjeksi (httpx.MockTransport) untuk testing.
+    - v2.9: retry otomatis dengan backoff - percobaan gagal dicoba lagi
+      hingga max_attempts (jeda backoff_seconds di antaranya). Hasil
+      mencatat attempts (jumlah percobaan) + duration_ms (total waktu).
     """
 
-    def __init__(self, url: str, transport: Optional[httpx.AsyncBaseTransport] = None):
+    def __init__(
+        self,
+        url: str,
+        transport: Optional[httpx.AsyncBaseTransport] = None,
+        max_attempts: int = 3,
+        backoff_seconds: float = 1.0,
+    ):
         self.url = str(url).strip()
         self._transport = transport
+        self.max_attempts = max(1, min(int(max_attempts), 5))
+        self.backoff_seconds = max(0.0, float(backoff_seconds))
         self.last_result: Optional[Dict[str, Any]] = None
 
     def get_status(self) -> Dict[str, Any]:
@@ -80,12 +93,8 @@ class WebhookDispatcher:
             base["message"] = "Crypto Oracle AI webhook test - konfigurasi OK."
         return base
 
-    async def dispatch(self, alert: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """POST payload ke webhook. Selalu mengembalikan hasil, tak pernah raise."""
-        if not self.url:
-            result = {"ok": False, "status_code": None, "reason": "not_configured"}
-            self.last_result = result
-            return result
+    async def _attempt_once(self, alert: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Satu percobaan POST (tanpa retry). Selalu kembalikan hasil."""
         try:
             async with httpx.AsyncClient(
                 timeout=10.0,
@@ -97,16 +106,42 @@ class WebhookDispatcher:
                     headers={"X-ZCapital-Event": "alert" if alert else "test"},
                 )
             ok = 200 <= resp.status_code < 300
-            result = {
+            return {
                 "ok": ok,
                 "status_code": resp.status_code,
                 "reason": None if ok else f"http_{resp.status_code}",
             }
         except httpx.TimeoutException:
-            result = {"ok": False, "status_code": None, "reason": "timeout"}
+            return {"ok": False, "status_code": None, "reason": "timeout"}
         except Exception as e:  # noqa: BLE001 - webhook gagal tidak boleh crash
             logger.warning(f"Webhook dispatch failed: {e}")
-            result = {"ok": False, "status_code": None, "reason": "error", "detail": str(e)}
+            return {"ok": False, "status_code": None, "reason": "error", "detail": str(e)}
+
+    async def dispatch(self, alert: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """POST payload ke webhook dengan retry + backoff (v2.9).
+
+        Selalu mengembalikan hasil, tak pernah raise. Percobaan gagal
+        diulang hingga max_attempts dengan jeda backoff_seconds * n.
+        Result: {ok, status_code, reason?, attempts, duration_ms}.
+        """
+        if not self.url:
+            result = {
+                "ok": False, "status_code": None, "reason": "not_configured",
+                "attempts": 0, "duration_ms": 0,
+            }
+            self.last_result = result
+            return result
+
+        started = time.monotonic()
+        result: Dict[str, Any] = {"ok": False, "status_code": None, "reason": "not_configured"}
+        for attempt in range(1, self.max_attempts + 1):
+            result = await self._attempt_once(alert)
+            result["attempts"] = attempt
+            if result.get("ok"):
+                break
+            if attempt < self.max_attempts and self.backoff_seconds > 0:
+                await asyncio.sleep(self.backoff_seconds * attempt)
+        result["duration_ms"] = int((time.monotonic() - started) * 1000)
         self.last_result = result
         return result
 

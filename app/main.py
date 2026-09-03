@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 import time
-from typing import Dict, Optional, Set
+from typing import Any, Dict, Optional, Set
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -217,13 +217,43 @@ class CryptoOracleApp:
         except Exception as e:
             logger.warning(f"Failed to broadcast alert: {e}")
 
-        # v2.8: dispatch webhook (fire-and-forget, timeout ketat di dalam)
+        # v2.8/v2.9: dispatch webhook (fire-and-forget) + catat hasil
+        # delivery ke DB agar audit delivery tahan restart.
         try:
             dispatcher = get_webhook()
             if dispatcher is not None:
-                self._spawn_background_task(dispatcher.dispatch(alert=alert))
+                self._spawn_background_task(
+                    self._dispatch_webhook_and_log(dispatcher, alert)
+                )
         except Exception as e:  # noqa: BLE001
             logger.debug(f"Webhook dispatch skipped: {e}")
+
+    async def _dispatch_webhook_and_log(
+        self, dispatcher: Any, alert: Dict
+    ) -> None:
+        """Dispatch alert ke webhook lalu catat hasilnya di DB (v2.9).
+
+        Logging delivery dilakukan best-effort: kegagalan DB TIDAK boleh
+        memengaruhi pipeline alert maupun dispatch itu sendiri.
+        """
+        try:
+            result = await dispatcher.dispatch(alert=alert)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Webhook dispatch error: {e}")
+            return
+        try:
+            await self.db.log_webhook_delivery(
+                event="alert",
+                ok=bool(result.get("ok")),
+                status_code=result.get("status_code"),
+                reason=result.get("reason"),
+                attempts=int(result.get("attempts") or 1),
+                duration_ms=result.get("duration_ms"),
+                rule=alert.get("rule"),
+                symbol=alert.get("symbol"),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Webhook delivery log failed: {e}")
 
     # ===== v2.5: Retensi alert_history (housekeeping otomatis) =====
 
@@ -240,6 +270,11 @@ class CryptoOracleApp:
         if days <= 0:
             return None
         deleted = await self.db.prune_alert_history(days)
+        # v2.9: webhook delivery log di-prune dengan retensi yang sama
+        try:
+            await self.db.prune_webhook_deliveries(days)
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Webhook delivery prune failed: {e}")
         record_prune_result(_utc_now().isoformat(), deleted)
         if deleted:
             logger.info(f"Alert retention: pruned {deleted} rows (>{days} days old)")
@@ -405,7 +440,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crypto Oracle AI",
     description="Decentralized Pump/Dump Detection System",
-    version="2.8.0",
+    version="2.9.0",
     lifespan=lifespan
 )
 
@@ -433,7 +468,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "name": "Crypto Oracle AI",
-        "version": "2.7.0",
+        "version": "2.9.0",
         "description": "Decentralized Pump/Dump Detection System with Enterprise Security",
         "endpoints": {
             "/health": "Health check endpoint",

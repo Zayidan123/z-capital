@@ -131,6 +131,23 @@ class Database:
                 )
             """)
 
+            # Create webhook_deliveries table (v2.9: log hasil pengiriman
+            # webhook - audit delivery, retry terlihat, tahan restart)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS webhook_deliveries (
+                    id SERIAL PRIMARY KEY,
+                    event VARCHAR(20) NOT NULL,
+                    ok BOOLEAN NOT NULL,
+                    status_code INTEGER,
+                    reason VARCHAR(100),
+                    attempts INTEGER NOT NULL DEFAULT 1,
+                    duration_ms INTEGER,
+                    rule VARCHAR(100),
+                    symbol VARCHAR(50),
+                    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes for better query performance
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_anomali_logs_symbol 
@@ -155,6 +172,10 @@ class Database:
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_alert_history_symbol 
                 ON alert_history(symbol)
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_created 
+                ON webhook_deliveries(created_at)
             """)
             
             logger.info("Database tables created successfully")
@@ -380,6 +401,7 @@ class Database:
         limit: int = 50,
         symbol: Optional[str] = None,
         hours: Optional[int] = None,
+        priority: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Riwayat alert terbaru dari DB (terbaru dulu).
 
@@ -387,6 +409,7 @@ class Database:
 
         v2.6: filter opsional symbol (exact match) dan hours (jendela waktu
         ke belakang) untuk click-to-filter dari heat map dashboard.
+        v2.9: filter opsional priority (exact, high/medium/low).
         """
         import json as _json
         async with self.get_connection() as conn:
@@ -400,6 +423,11 @@ class Database:
                 clauses.append(
                     f"timestamp > NOW() - make_interval(hours => ${len(args)})"
                 )
+            if priority:
+                args.append(str(priority).lower())
+                # v2.9: LOWER di sisi kolom - data lama menyimpan "HIGH",
+                # data baru "high"; keduanya harus cocok
+                clauses.append(f"LOWER(priority) = ${len(args)}")
             args.append(max(1, min(int(limit), 500)))
             where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
             rows = await conn.fetch(
@@ -575,6 +603,79 @@ class Database:
             )
             return isinstance(status, str) and status.startswith("DELETE") \
                 and not status.endswith(" 0")
+
+    # ===== v2.9: Webhook delivery log (audit delivery tahan restart) =====
+
+    async def log_webhook_delivery(
+        self,
+        event: str,
+        ok: bool,
+        status_code: Optional[int] = None,
+        reason: Optional[str] = None,
+        attempts: int = 1,
+        duration_ms: Optional[int] = None,
+        rule: Optional[str] = None,
+        symbol: Optional[str] = None,
+    ) -> int:
+        """Catat satu hasil pengiriman webhook ke DB (audit + retry log).
+
+        Dipanggil setelah dispatch selesai (test endpoint maupun pipeline
+        alert) sehingga riwayat delivery tetap ada meski proses restart.
+        Returns id baris yang dibuat.
+        """
+        async with self.get_connection() as conn:
+            result = await conn.fetchrow(
+                """
+                INSERT INTO webhook_deliveries
+                    (event, ok, status_code, reason, attempts, duration_ms, rule, symbol)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+                """,
+                str(event)[:20],
+                bool(ok),
+                int(status_code) if status_code is not None else None,
+                (str(reason)[:100] if reason else None),
+                max(1, int(attempts or 1)),
+                int(duration_ms) if duration_ms is not None else None,
+                (str(rule)[:100] if rule else None),
+                (str(symbol)[:50] if symbol else None),
+            )
+            return result["id"]
+
+    async def get_webhook_deliveries(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Delivery webhook terbaru (terbaru dulu), dibatasi 1..200."""
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, event, ok, status_code, reason, attempts,
+                       duration_ms, rule, symbol, created_at
+                FROM webhook_deliveries
+                ORDER BY created_at DESC, id DESC
+                LIMIT $1
+                """,
+                max(1, min(int(limit), 200)),
+            )
+            return [dict(row) for row in rows]
+
+    async def prune_webhook_deliveries(self, retention_days: int) -> int:
+        """Hapus delivery log lebih tua dari N hari (0 = tidak menghapus)."""
+        days = int(retention_days)
+        if days <= 0:
+            return 0
+        async with self.get_connection() as conn:
+            status = await conn.execute(
+                """
+                DELETE FROM webhook_deliveries
+                WHERE created_at < NOW() - make_interval(days => $1)
+                """,
+                days,
+            )
+            if isinstance(status, str) and status.startswith("DELETE"):
+                try:
+                    return int(status.split()[-1])
+                except (ValueError, IndexError):
+                    return 0
+            return 0
 
     async def get_recent_signals(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent signals from the database"""
