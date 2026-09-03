@@ -5,7 +5,7 @@ Auto-Snipe, Dynamic TP/SL, Portfolio Tracking
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, asdict
 
 from app.config import get_settings
@@ -175,7 +175,7 @@ class RiskManager:
             position = TradePosition(
                 symbol=symbol,
                 entry_price=entry_price,
-                entry_time=datetime.utcnow(),
+                entry_time=datetime.now(timezone.utc),
                 amount=position_size,
                 stop_loss=stop_loss,
                 take_profit_levels=tp_levels,
@@ -395,7 +395,7 @@ class PortfolioTracker:
     ) -> None:
         """Record a trade in history"""
         trade = {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'symbol': symbol,
             'action': action,
             'price': price,

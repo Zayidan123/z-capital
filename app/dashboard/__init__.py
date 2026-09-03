@@ -5,7 +5,7 @@ Real-time dashboard, alerting system, and backtesting engine
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 from app.config import get_settings
@@ -35,7 +35,7 @@ class RealTimeDashboard:
     
     def record_metric(self, metric_type: str, data: Dict[str, Any]) -> None:
         """Record a metric point"""
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         
         metric = {
             'timestamp': timestamp,
@@ -76,7 +76,7 @@ class RealTimeDashboard:
             dashboard = {
                 'status': 'running',
                 'uptime': self._get_uptime(),
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'summary': {
                     'total_anomalies_24h': total_anomalies_24h,
                     'symbols_monitored': len(symbols_monitored),
@@ -206,7 +206,7 @@ class AlertSystem:
                     symbol = analysis_result.get('symbol', 'UNKNOWN')
                     rate_key = f"{rule_name}:{symbol}"
                     
-                    now = datetime.utcnow()
+                    now = datetime.now(timezone.utc)
                     last_alert = self.rate_limits.get(rate_key)
                     
                     # Rate limit: max 1 alert per 5 minutes per rule per symbol
@@ -298,12 +298,23 @@ class BacktestEngine:
             )
             
             # Filter by date range
-            cutoff_date = datetime.utcnow() - timedelta(days=days)
-            filtered_anomalies = [
-                a for a in anomalies
-                if a.get('timestamp') and 
-                datetime.fromisoformat(str(a['timestamp']).replace('Z', '+00:00')) > cutoff_date
-            ]
+            # CATATAN: asyncpg mengembalikan datetime timezone-aware untuk kolom
+            # TIMESTAMPTZ. Bandingkan dengan datetime yang juga timezone-aware
+            # agar tidak terjadi TypeError (naive vs aware).
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            filtered_anomalies = []
+            for a in anomalies:
+                ts = a.get('timestamp')
+                if not ts:
+                    continue
+                if isinstance(ts, datetime):
+                    ts_dt = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+                else:
+                    ts_dt = datetime.fromisoformat(
+                        str(ts).replace('Z', '+00:00')
+                    )
+                if ts_dt > cutoff_date:
+                    filtered_anomalies.append(a)
             
             # Simulate trades on each signal
             hypothetical_pnl = []

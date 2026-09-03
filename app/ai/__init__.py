@@ -5,7 +5,7 @@ Pattern Recognition, Sentiment Analysis, Social Volume Tracking
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import deque
 
 import numpy as np
@@ -74,7 +74,7 @@ class PatternRecognizer:
     
     def update_price_data(self, symbol: str, price: float, volume: float) -> None:
         """Update price and volume history for a symbol"""
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
         
         if symbol not in self.price_history:
             self.price_history[symbol] = deque(maxlen=self.max_history_length)
@@ -274,13 +274,14 @@ class SentimentAnalyzer:
             total_negative = 0.0
             total_neutral = 0.0
             key_phrases = []
+            sources_analyzed = 0
             
             for text in text_sources:
                 if not text:
                     continue
                 
                 text_lower = text.lower()
-                sources_analyzed = result['sources_analyzed'] + 1
+                sources_analyzed += 1
                 
                 # Score positive keywords
                 for word, weight in self.sentiment_lexicon['positive'].items():
@@ -323,6 +324,7 @@ class SentimentAnalyzer:
                 # Confidence based on amount of data
                 result['confidence'] = min(1.0, sources_analyzed / 10)
             
+            result['sources_analyzed'] = sources_analyzed
             result['key_phrases'] = list(set(key_phrases))[:10]  # Top 10 unique phrases
             
         except Exception as e:

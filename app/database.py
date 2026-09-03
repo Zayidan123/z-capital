@@ -49,6 +49,7 @@ class Database:
         """Close database connection pool"""
         if self.pool:
             await self.pool.close()
+            self.pool = None
             self._initialized = False
             logger.info("Database connection pool closed")
     

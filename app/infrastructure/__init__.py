@@ -6,7 +6,7 @@ import asyncio
 import logging
 import json
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 try:
     import redis.asyncio as aioredis
@@ -38,8 +38,8 @@ class RedisCache:
                 logger.warning("Redis package not installed, caching disabled")
                 return
             
-            # Get Redis URL from environment or use default
-            redis_url = getattr(self.settings, 'redis_url', 'redis://localhost:6379')
+            # Get Redis URL dari settings (mendukung REDIS_URL atau REDIS_HOST/REDIS_PORT)
+            redis_url = self.settings.get_redis_url()
             
             self.redis = await aioredis.from_url(
                 redis_url,
@@ -202,7 +202,7 @@ class RateLimiter:
         """Redis-based rate limiting using sliding window"""
         try:
             key = f"rate_limit:{identifier}"
-            now = datetime.utcnow().timestamp()
+            now = datetime.now(timezone.utc).timestamp()
             window_start = now - window
             
             # Use Redis sorted set for sliding window
@@ -236,7 +236,7 @@ class RateLimiter:
         window: int
     ) -> bool:
         """In-memory rate limiting (single instance only)"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         window_start = now - timedelta(seconds=window)
         
         if identifier not in self.memory_limits:
@@ -269,29 +269,43 @@ class HorizontalScaler:
         self.redis_cache = redis_cache
         self.instance_id = f"instance_{id(self)}"
         self.heartbeat_interval = 30  # seconds
+        self._heartbeat_task: Optional[asyncio.Task] = None
     
     async def start(self) -> None:
         """Start the scaler coordination"""
         logger.info(f"Horizontal Scaler started with instance ID: {self.instance_id}")
         
-        # Start heartbeat task
-        asyncio.create_task(self._heartbeat_loop())
+        # Start heartbeat task (simpan referensi agar tidak di-GC dan bisa di-cancel)
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
     
     async def stop(self) -> None:
         """Stop the scaler coordination"""
+        # Cancel heartbeat task agar tidak berjalan selamanya
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
         # Remove instance from active instances
         await self._unregister_instance()
         logger.info("Horizontal Scaler stopped")
     
     async def _heartbeat_loop(self) -> None:
         """Send periodic heartbeats"""
-        while True:
-            try:
-                await self._send_heartbeat()
-                await asyncio.sleep(self.heartbeat_interval)
-            except Exception as e:
-                logger.error(f"Heartbeat error: {e}")
-                await asyncio.sleep(self.heartbeat_interval)
+        try:
+            while True:
+                try:
+                    await self._send_heartbeat()
+                    await asyncio.sleep(self.heartbeat_interval)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error(f"Heartbeat error: {e}")
+                    await asyncio.sleep(self.heartbeat_interval)
+        except asyncio.CancelledError:
+            logger.debug("Heartbeat loop cancelled")
     
     async def _send_heartbeat(self) -> None:
         """Send heartbeat to Redis"""
@@ -303,7 +317,7 @@ class HorizontalScaler:
             
             heartbeat_data = {
                 'instance_id': self.instance_id,
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'status': 'healthy'
             }
             
@@ -344,7 +358,9 @@ class HorizontalScaler:
                     
                     # Check if heartbeat is recent (within 2 minutes)
                     timestamp = datetime.fromisoformat(data['timestamp'])
-                    if (datetime.utcnow() - timestamp).total_seconds() < 120:
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    if (datetime.now(timezone.utc) - timestamp).total_seconds() < 120:
                         instances.append(data)
                         
                 except Exception:
@@ -414,7 +430,7 @@ class MessageQueue:
             # Use Redis list as queue (LPUSH for enqueue)
             message_with_meta = {
                 **message,
-                'queued_at': datetime.utcnow().isoformat(),
+                'queued_at': datetime.now(timezone.utc).isoformat(),
                 'priority': priority
             }
             

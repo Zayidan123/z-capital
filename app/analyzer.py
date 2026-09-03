@@ -5,7 +5,7 @@ Analyzes anomalies using Etherscan and CryptoPanic APIs
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from app.config import get_settings
@@ -199,7 +199,7 @@ class DeepDiveAnalyzer:
                             transactions = data['result'][:5]  # Last 5 transactions
                             
                             # Check for recent buys (last 10 minutes)
-                            current_time = datetime.utcnow().timestamp()
+                            current_time = datetime.now(timezone.utc).timestamp()
                             ten_minutes_ago = current_time - (10 * 60)
                             
                             for tx in transactions:

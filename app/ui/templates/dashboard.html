@@ -226,9 +226,9 @@
         <!-- System Stats -->
         <div class="dashboard-grid">
             <div class="card">
-                <h2>📊 Total Signals</h2>
+                <h2>📊 Signals (24h)</h2>
                 <div class="stat-value" id="total-signals">0</div>
-                <div class="stat-label">Detected in last 24h</div>
+                <div class="stat-label">Confirmed in last 24h</div>
             </div>
             <div class="card">
                 <h2>✅ Success Rate</h2>
@@ -255,15 +255,14 @@
                     <tr>
                         <th>Symbol</th>
                         <th>Type</th>
-                        <th>Confidence</th>
-                        <th>Price</th>
-                        <th>Time</th>
                         <th>Status</th>
+                        <th>Message</th>
+                        <th>Time</th>
                     </tr>
                 </thead>
                 <tbody id="signals-body">
                     <tr>
-                        <td colspan="6" style="text-align: center; color: #666;">Loading signals...</td>
+                        <td colspan="5" style="text-align: center; color: #666;">Loading signals...</td>
                     </tr>
                 </tbody>
             </table>
@@ -295,26 +294,44 @@
     </div>
 
     <script>
+        // Semua request relatif ke prefix dashboard (router dimount di /dashboard)
+        const API_BASE = '/dashboard';
         // WebSocket connection for real-time updates
         let ws = null;
+        let reconnectDelay = 5000;
+        
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
         
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${window.location.host}/ws/updates`);
+            ws = new WebSocket(`${protocol}//${window.location.host}${API_BASE}/ws/updates`);
             
             ws.onopen = () => {
                 console.log('Connected to dashboard');
+                reconnectDelay = 5000;
                 addLog('Connected to real-time update stream');
             };
             
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch (e) {
+                    console.error('Invalid JSON from WS:', e);
+                    return;
+                }
                 handleWebSocketMessage(data);
             };
             
             ws.onclose = () => {
                 console.log('Disconnected, reconnecting...');
-                setTimeout(connectWebSocket, 5000);
+                addLog('Disconnected - reconnecting in ' + (reconnectDelay / 1000) + 's');
+                setTimeout(connectWebSocket, reconnectDelay);
+                reconnectDelay = Math.min(reconnectDelay * 1.5, 60000); // backoff
             };
             
             ws.onerror = (error) => {
@@ -327,6 +344,13 @@
                 updateDashboard(data.data);
             } else if (data.type === 'connection_established') {
                 addLog(data.message);
+            } else if (data.type === 'anomaly_detected') {
+                const a = data.data || {};
+                addLog(`🚨 Anomaly: ${escapeHtml(a.symbol)} spike +${Number(a.volume_spike || 0).toFixed(0)}%`);
+            } else if (data.type === 'signal_confirmed') {
+                const s = data.data || {};
+                addLog(`✅ Signal confirmed: ${escapeHtml(s.symbol)} (confidence ${Math.round((s.confidence || 0) * 100)}%)`);
+                fetchStats(); // refresh tabel
             }
         }
         
@@ -346,10 +370,12 @@
         
         async function fetchStats() {
             try {
-                const response = await fetch('/api/stats');
+                const response = await fetch(`${API_BASE}/api/stats`);
                 const data = await response.json();
                 if (data.status === 'success') {
                     updateDashboard(data.data);
+                } else {
+                    console.error('Stats error:', data.message);
                 }
             } catch (error) {
                 console.error('Error fetching stats:', error);
@@ -357,9 +383,14 @@
         }
         
         function updateDashboard(data) {
-            // Update stats
-            document.getElementById('total-signals').textContent = data.signals?.length || 0;
-            document.getElementById('success-rate').textContent = '87%'; // Mock value
+            if (!data) return;
+            const system = data.system || {};
+            
+            // Update stats (pakai data sistem yang sesungguhnya)
+            document.getElementById('total-signals').textContent = system.signals_24h ?? (data.signals?.length || 0);
+            const successRate = system.success_rate;
+            document.getElementById('success-rate').textContent =
+                (successRate !== undefined && successRate !== null) ? `${successRate}%` : '0%';
             document.getElementById('uptime').textContent = `${data.uptime || 0}h`;
             
             // Update signals table
@@ -368,18 +399,21 @@
                 tbody.innerHTML = '';
                 data.signals.slice(0, 10).forEach(signal => {
                     const row = document.createElement('tr');
-                    const confidenceClass = signal.confidence_score >= 80 ? 'confidence-high' : 
-                                          signal.confidence_score >= 60 ? 'confidence-medium' : 'confidence-low';
+                    const status = String(signal.status || 'unknown');
+                    const statusClass = status === 'sent' ? 'confidence-high' :
+                                        status === 'failed' ? 'confidence-low' : 'confidence-medium';
+                    const ts = signal.timestamp ? new Date(signal.timestamp).toLocaleString() : '-';
                     row.innerHTML = `
-                        <td><strong>${signal.symbol}</strong></td>
-                        <td>${signal.signal_type}</td>
-                        <td><span class="confidence-badge ${confidenceClass}">${signal.confidence_score}%</span></td>
-                        <td>$${signal.price?.toFixed(6) || 'N/A'}</td>
-                        <td>${new Date(signal.timestamp).toLocaleTimeString()}</td>
-                        <td>${signal.status}</td>
+                        <td><strong>${escapeHtml(signal.symbol)}</strong></td>
+                        <td>${escapeHtml(signal.signal_type)}</td>
+                        <td><span class="confidence-badge ${statusClass}">${escapeHtml(status)}</span></td>
+                        <td>${escapeHtml(signal.message ? signal.message.split('\n')[0] : '-')}</td>
+                        <td>${escapeHtml(ts)}</td>
                     `;
                     tbody.appendChild(row);
                 });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #666;">No signals yet</td></tr>';
             }
         }
         
@@ -388,14 +422,14 @@
             resultsDiv.innerHTML = '<p>Running security audit...</p>';
             
             try {
-                const response = await fetch('/api/security/audit');
+                const response = await fetch(`${API_BASE}/api/security/audit`);
                 const data = await response.json();
                 
                 if (data.status === 'success') {
                     const audit = data.audit;
                     const passed = audit.pentest.tests_passed;
                     const total = audit.pentest.tests_run;
-                    const score = Math.round((passed / total) * 100);
+                    const score = total > 0 ? Math.round((passed / total) * 100) : 0;
                     
                     document.getElementById('security-score').textContent = `${score}/100`;
                     
@@ -411,15 +445,18 @@
                             <div>Tests Failed: <strong style="color: #ff5252">${audit.pentest.tests_failed}</strong></div>
                         </div>
                         <div style="margin-top: 15px;">
+                            <strong>Packages Scanned:</strong> ${audit.dependencies.scanned || 0} |
                             <strong>Vulnerabilities Found:</strong> ${audit.dependencies.vulnerable || 0}
                         </div>
-                        <pre style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-top: 10px; overflow-x: auto;">${audit.report}</pre>
+                        <pre style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-top: 10px; overflow-x: auto;">${escapeHtml(audit.report)}</pre>
                     `;
                     
                     addLog(`Security audit completed: ${score}/100 score`);
+                } else {
+                    resultsDiv.innerHTML = `<p style="color: #ff5252">Audit error: ${escapeHtml(data.message)}</p>`;
                 }
             } catch (error) {
-                resultsDiv.innerHTML = `<p style="color: #ff5252">Audit failed: ${error.message}</p>`;
+                resultsDiv.innerHTML = `<p style="color: #ff5252">Audit failed: ${escapeHtml(error.message)}</p>`;
             }
         }
         

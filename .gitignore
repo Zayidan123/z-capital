@@ -1,1 +1,53 @@
-Nothing needs to be added to .gitignore since only a Python source file (`app/ui/routes.py`) was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables (jangan pernah commit!)
+.env
+.env.local
+.env.*.local
+
+# Test / coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Database files (lokal)
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
+
+# Trivy / security scan output
+trivy-results.sarif

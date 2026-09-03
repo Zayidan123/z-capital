@@ -3,6 +3,7 @@ Telegram Notifier for Crypto Oracle AI
 Sends trading signals to Telegram
 """
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 
 from telegram import Bot
@@ -48,7 +49,11 @@ class TelegramNotifier:
     async def stop(self) -> None:
         """Cleanup resources"""
         if self.bot:
-            await self.bot.session.close()
+            try:
+                # python-telegram-bot v20+: gunakan shutdown(), bukan session.close()
+                await self.bot.shutdown()
+            except Exception as e:
+                logger.debug(f"Error shutting down Telegram bot: {e}")
         logger.info("Telegram notifier stopped")
     
     async def send_signal(self, analysis_result: Dict[str, Any]) -> Optional[int]:
@@ -172,12 +177,10 @@ class TelegramNotifier:
     
     def _get_current_time(self) -> str:
         """Get current time in WIB (UTC+7)"""
-        from datetime import datetime
-        import pytz
+        from zoneinfo import ZoneInfo
         
-        utc_now = datetime.utcnow()
-        wib_tz = pytz.timezone('Asia/Jakarta')
-        wib_time = utc_now.replace(tzinfo=pytz.utc).astimezone(wib_tz)
+        wib_tz = ZoneInfo('Asia/Jakarta')
+        wib_time = datetime.now(wib_tz)
         
         return wib_time.strftime('%d %b %Y, %H:%M WIB')
     

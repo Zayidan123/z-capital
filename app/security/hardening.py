@@ -6,19 +6,20 @@ Security Hardening Module
 - Signal validation layers
 """
 import os
-import json
+import re
 import hashlib
 import secrets
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import httpx
 
 try:
     from app.config import settings
-except ImportError:
-    # Fallback for direct import
-    from app.config.settings import settings
+except ImportError:  # pragma: no cover - fallback when run as a script
+    from app.config import get_settings
+
+    settings = get_settings()
 
 class SecretsManager:
     """
@@ -32,7 +33,7 @@ class SecretsManager:
         
     def get_secret(self, name: str, default: Optional[str] = None) -> Optional[str]:
         """Ambil rahasia dengan caching dan TTL"""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         
         # Cek cache
         if name in self.cache and name in self.cache_ttl:
@@ -75,11 +76,17 @@ class SecretsManager:
 
 class DependencyAuditor:
     """Audit dependensi untuk kerentanan keamanan"""
-    
+
     VULN_DATABASE_URL = "https://api.osv.dev/v1/query"  # Open Source Vulnerabilities
-    
-    def __init__(self):
-        self.requirements_path = Path("/app/requirements.txt")
+
+    # Pattern untuk spec requirement PEP 508 (contoh: ">=1.2.0", "==3.4", "~=2.1.0")
+    _VERSION_RE = re.compile(r"(?:==|>=|~=|>|===)\s*v?(\d[^\s,;]*)")
+
+    def __init__(self, requirements_path: Optional[Path] = None):
+        # Default: relatif terhadap root proyek (bukan hard-coded /app)
+        if requirements_path is None:
+            requirements_path = Path(__file__).resolve().parents[2] / "requirements.txt"
+        self.requirements_path = requirements_path
         
     async def scan_dependencies(self) -> Dict[str, Any]:
         """Scan semua dependensi untuk kerentanan"""
@@ -92,19 +99,24 @@ class DependencyAuditor:
         try:
             # Baca requirements.txt
             if not self.requirements_path.exists():
-                return {"error": "requirements.txt not found"}
+                return {"error": f"requirements.txt not found at {self.requirements_path}"}
             
             with open(self.requirements_path, 'r') as f:
                 packages = []
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith('#'):
-                        # Parse package==version
-                        if '==' in line:
-                            name, version = line.split('==')
-                            packages.append({"name": name.strip(), "version": version.strip()})
-                        else:
-                            packages.append({"name": line, "version": "latest"})
+                    if not line or line.startswith('#') or line.startswith('-'):
+                        continue
+                    # Parse package spec (e.g. "pandas>=2.1.0") -> gunakan versi minimum
+                    # sebagai versi yang di-scan. Spec tanpa pin versi tidak bisa
+                    # divalidasi terhadap OSV, jadi lewati.
+                    name_part = re.split(r"[\[\s=<>~!;]", line, 1)[0]
+                    version_match = self._VERSION_RE.search(line)
+                    if version_match:
+                        packages.append({
+                            "name": name_part.strip(),
+                            "version": version_match.group(1).strip(),
+                        })
             
             results["scanned"] = len(packages)
             
@@ -188,7 +200,7 @@ class SignalValidator:
         """
         validation_results = {
             "symbol": signal_data.get("symbol", "UNKNOWN"),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utc_now_iso(),
             "layers_passed": 0,
             "total_layers": len(self.validation_layers),
             "confidence_score": 0,
@@ -318,6 +330,11 @@ class SignalValidator:
         }
 
 
+def _utc_now_iso() -> str:
+    """Current UTC timestamp as ISO-8601 string (timezone-aware)."""
+    return datetime.now(timezone.utc).isoformat()
+
+
 class PenetrationTester:
     """Simulasi uji penetrasi dasar"""
     
@@ -335,7 +352,7 @@ class PenetrationTester:
         ]
         
         results = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": _utc_now_iso(),
             "tests_run": 0,
             "tests_passed": 0,
             "tests_failed": 0,
@@ -365,7 +382,7 @@ class PenetrationTester:
     
     async def _test_env_exposure(self) -> Dict[str, Any]:
         """Test: Pastikan .env tidak terekspos"""
-        env_path = Path("/app/.env")
+        env_path = Path(".env")
         exposed = env_path.exists() and os.getenv("EXPOSE_ENV", "false").lower() == "true"
         
         # Dalam container yang benar, .env tidak boleh accessible via web
@@ -382,12 +399,16 @@ class PenetrationTester:
         """Test: Pastikan API key tidak bocor di log"""
         # Simulasi: cek apakah ada pola API key di output
         api_keys = [
-            settings.TELEGRAM_BOT_TOKEN,
-            settings.ETHERSCAN_API_KEY,
-            settings.CRYPTOPANIC_API_KEY
+            settings.telegram_bot_token,
+            settings.etherscan_api_key,
+            settings.cryptopanic_api_key,
         ]
         
-        leaked = any(key and len(key) > 10 for key in api_keys if key in str(self.test_results))
+        results_text = str(self.test_results)
+        leaked = any(
+            isinstance(key, str) and len(key) > 10 and key in results_text
+            for key in api_keys
+        )
         passed = not leaked
         
         return {
@@ -413,7 +434,7 @@ class PenetrationTester:
     async def _test_rate_limiting(self) -> Dict[str, Any]:
         """Test: Rate limiting berfungsi"""
         # Cek apakah Redis tersedia untuk rate limiting
-        redis_available = settings.REDIS_HOST is not None
+        redis_available = bool(settings.redis_host or settings.redis_url)
         passed = redis_available
         
         return {

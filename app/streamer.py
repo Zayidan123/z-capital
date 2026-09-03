@@ -6,12 +6,11 @@ import asyncio
 import logging
 import json
 import time
-from typing import Dict, List, Optional, Callable, Any
-from collections import defaultdict
-from datetime import datetime, timedelta
+from typing import Dict, Optional, Callable, Any, Set
+from collections import defaultdict, deque
+from datetime import datetime, timezone
 
 import websockets
-import pandas as pd
 from app.config import get_settings
 from app.database import Database
 
@@ -24,49 +23,64 @@ class VolumeTracker:
     def __init__(self, window_minutes: int = 5):
         self.window_minutes = window_minutes
         self.window_seconds = window_minutes * 60
-        # Store volume data: {symbol: [(timestamp, volume), ...]}
-        self.volume_data: Dict[str, List[tuple]] = defaultdict(list)
+        # Store volume DELTA per interval: {symbol: deque[(timestamp, delta_volume)]}
+        # CATATAN: field 'q' dari Binance ticker adalah kumulatif volume 24 jam,
+        # bukan volume per interval. Untuk mendeteksi spike, kita hitung selisih
+        # (delta) antar snapshot kumulatif, bukan nilai absolutnya.
+        self.volume_deltas: Dict[str, deque] = defaultdict(lambda: deque(maxlen=300))
+        self.last_cumulative_volume: Dict[str, float] = {}
+        self.last_update_time: Dict[str, float] = {}
         # Store current ticker data
         self.current_tickers: Dict[str, Dict[str, Any]] = {}
     
     def update_ticker(self, symbol: str, data: Dict[str, Any]) -> None:
-        """Update ticker data for a symbol"""
+        """Update ticker data for a symbol and record volume delta"""
         self.current_tickers[symbol] = data
         
-        # Extract volume (24h volume in quote asset)
-        volume = float(data.get('q', 0))  # 'q' is quote volume in USDT
+        # Extract cumulative 24h quote volume ('q' = quote asset volume)
+        try:
+            cumulative_volume = float(data.get('q', 0))
+        except (TypeError, ValueError):
+            return
         timestamp = time.time()
         
-        # Add to volume history
-        self.volume_data[symbol].append((timestamp, volume))
+        # Hitung delta volume sejak update terakhir
+        if symbol in self.last_cumulative_volume:
+            prev_volume = self.last_cumulative_volume[symbol]
+            delta = cumulative_volume - prev_volume
+            # Rolling 24h window Binance bisa membuat delta negatif;
+            # abaikan delta negatif agar tidak merusak rata-rata.
+            if delta >= 0:
+                self.volume_deltas[symbol].append((timestamp, delta))
         
-        # Clean old data outside the window
+        self.last_cumulative_volume[symbol] = cumulative_volume
+        self.last_update_time[symbol] = timestamp
+        
+        # Clean old data outside the window (O(1) amortized dengan deque)
         cutoff = timestamp - self.window_seconds
-        self.volume_data[symbol] = [
-            (ts, vol) for ts, vol in self.volume_data[symbol]
-            if ts > cutoff
-        ]
+        deltas = self.volume_deltas[symbol]
+        while deltas and deltas[0][0] <= cutoff:
+            deltas.popleft()
     
     def calculate_volume_spike(self, symbol: str) -> Optional[float]:
         """
         Calculate volume spike percentage for a symbol
         Returns the spike percentage or None if insufficient data
         """
-        if symbol not in self.volume_data or len(self.volume_data[symbol]) < 2:
+        deltas = self.volume_deltas.get(symbol)
+        if not deltas or len(deltas) < 2:
             return None
         
-        volumes = [vol for _, vol in self.volume_data[symbol]]
+        volumes = [vol for _, vol in deltas]
         
-        if len(volumes) < 2:
-            return None
-        
-        # Calculate average volume in the window
-        avg_volume = sum(volumes) / len(volumes)
-        
-        # Current volume (most recent)
+        # Current volume delta (interval terakhir)
         current_volume = volumes[-1]
         
-        if avg_volume == 0:
+        # Baseline: rata-rata delta SEBELUM interval terakhir
+        baseline = volumes[:-1]
+        avg_volume = sum(baseline) / len(baseline)
+        
+        if avg_volume <= 0:
             return None
         
         # Calculate spike percentage
@@ -77,15 +91,19 @@ class VolumeTracker:
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol"""
         if symbol in self.current_tickers:
-            return float(self.current_tickers[symbol].get('c', 0))
+            try:
+                return float(self.current_tickers[symbol].get('c', 0))
+            except (TypeError, ValueError):
+                return None
         return None
     
     def get_volume_stats(self, symbol: str) -> Dict[str, Any]:
         """Get volume statistics for a symbol"""
-        if symbol not in self.volume_data or len(self.volume_data[symbol]) == 0:
+        deltas = self.volume_deltas.get(symbol)
+        if not deltas:
             return {}
         
-        volumes = [vol for _, vol in self.volume_data[symbol]]
+        volumes = [vol for _, vol in deltas]
         
         return {
             'current_volume': volumes[-1] if volumes else 0,
@@ -117,8 +135,10 @@ class BinanceStreamer:
         self.ws_url = self.settings.binance_ws_url
         self.websocket = None
         self.reconnect_delay = 5
-        self.processed_symbols = set()  # Track symbols we've already alerted on
+        self.processed_symbols: Set[str] = set()  # Track symbols in cooldown
         self.cooldown_period = 300  # 5 minutes cooldown per symbol
+        # Referensi kuat ke task cooldown agar tidak di-garbage-collect
+        self._cooldown_tasks: Set[asyncio.Task] = set()
     
     async def start(self) -> None:
         """Start the Binance WebSocket streamer"""
@@ -138,7 +158,16 @@ class BinanceStreamer:
         """Stop the streamer"""
         self.running = False
         if self.websocket:
-            await self.websocket.close()
+            try:
+                await self.websocket.close()
+            except Exception as e:
+                logger.debug(f"Error closing websocket during stop: {e}")
+            finally:
+                self.websocket = None
+        # Batalkan semua pending cooldown task
+        for task in list(self._cooldown_tasks):
+            task.cancel()
+        self._cooldown_tasks.clear()
         logger.info("Binance streamer stopped")
     
     async def _connect_and_stream(self) -> None:
@@ -254,7 +283,7 @@ class BinanceStreamer:
                         'volume_spike': spike,
                         'volume_current': volume_stats['current_volume'],
                         'volume_avg': volume_stats['avg_volume'],
-                        'timestamp': datetime.utcnow().isoformat()
+                        'timestamp': datetime.now(timezone.utc).isoformat()
                     }
                     await self.anomaly_callback(anomaly_data)
                     
@@ -271,8 +300,11 @@ class BinanceStreamer:
         """Add symbol to cooldown tracking"""
         self.processed_symbols.add(symbol)
         
-        # Schedule removal from cooldown after cooldown period
-        asyncio.create_task(self._remove_from_cooldown(symbol))
+        # Schedule removal from cooldown after cooldown period.
+        # Simpan referensi kuat agar task tidak di-garbage-collect (race GC).
+        task = asyncio.create_task(self._remove_from_cooldown(symbol))
+        self._cooldown_tasks.add(task)
+        task.add_done_callback(self._cooldown_tasks.discard)
     
     async def _remove_from_cooldown(self, symbol: str) -> None:
         """Remove symbol from cooldown after cooldown period"""

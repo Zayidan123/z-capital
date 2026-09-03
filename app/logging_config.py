@@ -1,7 +1,8 @@
+import json
 import logging
 import sys
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> logging.Logger:
     """
@@ -18,13 +19,19 @@ def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> lo
     # Create custom formatter for JSON-like structured logs
     class StructuredFormatter(logging.Formatter):
         def format(self, record):
-            timestamp = datetime.utcnow().isoformat() + "Z"
-            return f'{{"timestamp": "{timestamp}", "level": "{record.levelname}", "module": "{record.module}", "message": "{record.getMessage()}"}}'
+            timestamp = datetime.now(timezone.utc).isoformat()
+            # Gunakan json.dumps agar message dengan quote/backslash tetap valid JSON
+            return json.dumps({
+                "timestamp": timestamp,
+                "level": record.levelname,
+                "module": record.module,
+                "message": record.getMessage(),
+            }, default=str)
     
     # Create console formatter for better readability during development
     class ConsoleFormatter(logging.Formatter):
         def format(self, record):
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             return f"[{timestamp}] [{record.levelname:8}] [{record.module:15}] {record.getMessage()}"
     
     # Get root logger
