@@ -19,13 +19,15 @@ from app.config import get_settings
 from app.database import Database, get_database
 from app.streamer import BinanceStreamer
 from app.analyzer import DeepDiveAnalyzer
-from app.notifier import TelegramNotifier
+from app.notifier import TelegramNotifier, WebhookDispatcher
 from app import runtime_settings
 from app.ui.routes import (
     router as ui_router,
     broadcast_update,
     get_alert_system,
+    get_webhook,
     set_notifier,
+    set_webhook,
     record_prune_result,
 )
 
@@ -113,6 +115,7 @@ class CryptoOracleApp:
         try:
             await runtime_settings.load_overrides(self.db)
             await self._apply_persisted_telegram_config()
+            self._restore_persisted_webhook()
         except Exception as e:
             logger.warning(f"Runtime settings restore skipped: {e}")
 
@@ -164,6 +167,20 @@ class CryptoOracleApp:
             except Exception as e:
                 logger.warning(f"Telegram reconfigure at startup failed: {e}")
 
+    def _restore_persisted_webhook(self) -> None:
+        """Pasang webhook dispatcher dari setting tersimpan (v2.8).
+
+        Sinkron + tanpa jaringan: URL hanya divalidasi formatnya saat
+        apply; kegagalan decrypt/parse tidak boleh menggagalkan startup.
+        """
+        try:
+            url = runtime_settings.get_string("webhook_url")
+            if url:
+                set_webhook(WebhookDispatcher(url=url))
+                logger.info("Webhook dispatcher restored from persisted settings")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Webhook restore failed: {e}")
+
     def _spawn_background_task(self, coro) -> asyncio.Task:
         """Create a background task and keep a strong reference to it.
 
@@ -176,7 +193,12 @@ class CryptoOracleApp:
         return task
 
     async def _broadcast_alert(self, alert: Dict) -> None:
-        """Callback AlertSystem: dorong alert ter-trigger ke dashboard via WS."""
+        """Callback AlertSystem: dorong alert ter-trigger ke dashboard via WS.
+
+        v2.8: alert juga dikirim ke webhook (bila dikonfigurasi) sebagai
+        task background fire-and-forget - kegagalan webhook TIDAK boleh
+        memengaruhi broadcast dashboard maupun pipeline utama.
+        """
         try:
             await broadcast_update({
                 "type": "alert_triggered",
@@ -194,6 +216,14 @@ class CryptoOracleApp:
             })
         except Exception as e:
             logger.warning(f"Failed to broadcast alert: {e}")
+
+        # v2.8: dispatch webhook (fire-and-forget, timeout ketat di dalam)
+        try:
+            dispatcher = get_webhook()
+            if dispatcher is not None:
+                self._spawn_background_task(dispatcher.dispatch(alert=alert))
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Webhook dispatch skipped: {e}")
 
     # ===== v2.5: Retensi alert_history (housekeeping otomatis) =====
 
@@ -375,7 +405,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crypto Oracle AI",
     description="Decentralized Pump/Dump Detection System",
-    version="2.7.0",
+    version="2.8.0",
     lifespan=lifespan
 )
 

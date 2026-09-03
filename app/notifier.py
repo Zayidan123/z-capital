@@ -1,10 +1,14 @@
 """
-Telegram Notifier for Crypto Oracle AI
-Sends trading signals to Telegram
+Notification channels for Crypto Oracle AI
+- TelegramNotifier: sends trading signals to Telegram
+- WebhookDispatcher: posts alert payloads to an arbitrary HTTP endpoint (v2.8)
 """
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
+from urllib.parse import urlsplit
+
+import httpx
 
 from telegram import Bot
 from telegram.error import TelegramError
@@ -12,6 +16,103 @@ from app.config import get_settings
 from app.database import Database
 
 logger = logging.getLogger(__name__)
+
+
+def mask_webhook_url(url: str) -> Optional[str]:
+    """Samarkan webhook URL utk ditampilkan di dashboard (v2.8).
+
+    Hanya scheme + host yang tampil; path & query disembunyikan karena
+    sering memuat token unik (mis. https://hooks.example.com/TOKEN/...).
+    Bila host tidak bisa diparse, kembalikan None (bukan URL mentah).
+    """
+    if not url:
+        return None
+    try:
+        parts = urlsplit(str(url))
+        if not parts.netloc:
+            return None
+        return f"{parts.scheme or 'https'}://{parts.netloc}"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class WebhookDispatcher:
+    """Kirim alert sebagai JSON POST ke endpoint HTTP arbitrary (v2.8).
+
+    Desain:
+    - URL TIDAK pernah dikembalikan utuh oleh get_status() - hanya host
+      tersamarkan (path sering berisi token rahasia).
+    - dispatch() fire-and-forget friendly: timeout ketat (10s) + hasil
+      berupa dict {ok, status_code, reason}; TIDAK pernah raise.
+    - transport bisa diinjeksi (httpx.MockTransport) untuk testing.
+    """
+
+    def __init__(self, url: str, transport: Optional[httpx.AsyncBaseTransport] = None):
+        self.url = str(url).strip()
+        self._transport = transport
+        self.last_result: Optional[Dict[str, Any]] = None
+
+    def get_status(self) -> Dict[str, Any]:
+        """Status aman utk dashboard: configured + host tersamarkan."""
+        return {
+            "configured": bool(self.url),
+            "url_masked": mask_webhook_url(self.url),
+            "last_result": self.last_result,
+        }
+
+    def _build_payload(self, alert: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Payload standar webhook. Bila alert kosong -> payload test."""
+        base: Dict[str, Any] = {
+            "source": "z-capital",
+            "type": "alert.test" if not alert else "alert.triggered",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        if alert:
+            base["alert"] = {
+                "rule": alert.get("rule"),
+                "priority": alert.get("priority"),
+                "symbol": alert.get("symbol"),
+                "channels": alert.get("channels", []),
+                "timestamp": alert.get("timestamp"),
+                "data": alert.get("data", {}),
+            }
+        else:
+            base["message"] = "Crypto Oracle AI webhook test - konfigurasi OK."
+        return base
+
+    async def dispatch(self, alert: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """POST payload ke webhook. Selalu mengembalikan hasil, tak pernah raise."""
+        if not self.url:
+            result = {"ok": False, "status_code": None, "reason": "not_configured"}
+            self.last_result = result
+            return result
+        try:
+            async with httpx.AsyncClient(
+                timeout=10.0,
+                transport=self._transport,
+            ) as client:
+                resp = await client.post(
+                    self.url,
+                    json=self._build_payload(alert),
+                    headers={"X-ZCapital-Event": "alert" if alert else "test"},
+                )
+            ok = 200 <= resp.status_code < 300
+            result = {
+                "ok": ok,
+                "status_code": resp.status_code,
+                "reason": None if ok else f"http_{resp.status_code}",
+            }
+        except httpx.TimeoutException:
+            result = {"ok": False, "status_code": None, "reason": "timeout"}
+        except Exception as e:  # noqa: BLE001 - webhook gagal tidak boleh crash
+            logger.warning(f"Webhook dispatch failed: {e}")
+            result = {"ok": False, "status_code": None, "reason": "error", "detail": str(e)}
+        self.last_result = result
+        return result
+
+    async def test_send(self) -> Dict[str, Any]:
+        """Kirim payload test (dipakai endpoint POST /api/webhook/test)."""
+        return await self.dispatch(alert=None)
 
 
 class TelegramNotifier:

@@ -64,6 +64,16 @@ SETTING_SPECS: List[Dict[str, Any]] = [
             "responses). Applied to the running notifier."
         ),
     },
+    {
+        "key": "webhook_url",
+        "type": "secret",
+        "default": None,
+        "description": (
+            "Webhook endpoint for alert delivery (write-only). Stored "
+            "encrypted; only scheme://host is shown. Triggered alerts are "
+            "POSTed here as JSON (v2.8)."
+        ),
+    },
 ]
 
 SPECS_BY_KEY: Dict[str, Dict[str, Any]] = {s["key"]: s for s in SETTING_SPECS}
@@ -214,11 +224,16 @@ def build_settings_payload(db_values: Dict[str, str], defaults: Dict[str, Any]) 
             item["set"] = raw is not None
             item["persisted"] = overridden
             item["value"] = None
-            if key == "telegram_chat_id" and raw:
-                plain = decrypt_secret(raw) if is_encrypted(raw) else raw
+            if key == "telegram_chat_id":
+                plain = decrypt_secret(raw) if (raw and is_encrypted(raw)) else raw
                 item["masked"] = mask_chat_id(plain) if plain else None
-            elif key == "telegram_chat_id":
-                item["masked"] = None
+            elif key == "webhook_url":
+                # v2.8: hanya scheme://host yang tampil (path sering
+                # memuat token unik). Plaintext TIDAK pernah dikirim.
+                from app.notifier import mask_webhook_url
+
+                plain = decrypt_secret(raw) if (raw and is_encrypted(raw)) else raw
+                item["masked"] = mask_webhook_url(plain) if plain else None
         else:
             item["value"] = raw if raw is not None else item["default"]
             item["persisted"] = overridden

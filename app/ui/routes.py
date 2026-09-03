@@ -10,10 +10,12 @@ import io
 import json
 import asyncio
 import logging
+import math
 import time
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -24,6 +26,7 @@ from app import database as app_database
 from app.config import get_settings
 from app.database import get_recent_signals, get_system_stats
 from app.dashboard import AlertSystem, BacktestEngine
+from app.notifier import WebhookDispatcher, mask_webhook_url
 from app.runtime_settings import (
     SPECS_BY_KEY,
     build_settings_payload,
@@ -104,11 +107,12 @@ def get_backtest_engine() -> BacktestEngine:
 
 def reset_engines() -> None:
     """Reset singleton engines (untuk testing)."""
-    global _alert_system, _backtest_engine, _notifier, _last_prune
+    global _alert_system, _backtest_engine, _notifier, _last_prune, _webhook
     _alert_system = None
     _backtest_engine = None
     _notifier = None
     _last_prune = None
+    _webhook = None
 
 
 def set_notifier(notifier: Any) -> None:
@@ -120,6 +124,23 @@ def set_notifier(notifier: Any) -> None:
 def get_notifier() -> Optional[Any]:
     """Ambil notifier yang terpasang (None bila belum di-initialize)."""
     return _notifier
+
+
+# v2.8: holder webhook dispatcher (dipasang oleh main.initialize saat
+# startup restore, atau oleh PUT /api/settings ketika webhook_url diubah).
+# URL TIDAK pernah dikirim utuh ke client - hanya scheme://host.
+_webhook: Optional[WebhookDispatcher] = None
+
+
+def set_webhook(dispatcher: Optional[WebhookDispatcher]) -> None:
+    """Pasang WebhookDispatcher yang dipakai pipeline utama (v2.8)."""
+    global _webhook
+    _webhook = dispatcher
+
+
+def get_webhook() -> Optional[WebhookDispatcher]:
+    """Ambil webhook dispatcher aktif (None bila belum dikonfigurasi)."""
+    return _webhook
 
 
 def record_prune_result(at_iso: str, rows_deleted: int) -> None:
@@ -146,6 +167,17 @@ class RuleImportItem(BaseModel):
 class RuleImportRequest(BaseModel):
     """Body POST /api/alerts/rules/import (v2.7)"""
     rules: List[RuleImportItem] = Field(min_length=1, max_length=100)
+
+
+class BulkRuleUpdateRequest(BaseModel):
+    """Body POST /api/alerts/rules/bulk (v2.8).
+
+    Terapkan satu threshold ke banyak rule sekaligus. Status per-item
+    (bukan 422 batch) agar sebagian rule tetap ter-update bila ada satu
+    nama tidak dikenal - konsisten dengan perilaku import v2.7.
+    """
+    names: List[str] = Field(min_length=1, max_length=50)
+    threshold: float
 
 
 class BacktestRequest(BaseModel):
@@ -545,6 +577,70 @@ async def import_alert_rules(body: RuleImportRequest):
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/api/alerts/rules/bulk", dependencies=API_DEPS)
+async def bulk_update_alert_rules(body: BulkRuleUpdateRequest):
+    """Terapkan satu threshold ke banyak rule sekaligus (v2.8).
+
+    Perilaku konsisten dengan import (v2.7): status per-item sehingga
+    satu nama tidak dikenal / rule non-editable tidak menggagalkan
+    item lain. Threshold NaN/Inf/negatif ditolak eksplisit per-item.
+    """
+    try:
+        # NaN/Infinity lolos pydantic float - tolak eksplisit sebelum loop
+        if not math.isfinite(body.threshold) or body.threshold < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="threshold must be a finite number >= 0",
+            )
+
+        alert_system = await get_alert_system_async()
+        results: List[Dict[str, Any]] = []
+        updated = 0
+
+        for name in body.names:
+            name = str(name).strip()
+            if not name:
+                results.append({"name": name, "status": "invalid_name"})
+                continue
+            rule = next(
+                (r for r in alert_system.alert_rules if r.get("name") == name),
+                None,
+            )
+            if rule is None:
+                results.append({"name": name, "status": "unknown"})
+                continue
+            if not rule.get("editable"):
+                results.append({"name": name, "status": "not_editable"})
+                continue
+            try:
+                updated_rule = alert_system.set_rule_threshold(name, body.threshold)
+            except (KeyError, ValueError):
+                results.append({"name": name, "status": "invalid_threshold"})
+                continue
+            persisted = await alert_system.persist_rule_threshold(
+                name, body.threshold
+            )
+            updated += 1
+            results.append({
+                "name": name,
+                "status": "updated",
+                "threshold": updated_rule.get("threshold"),
+                "persisted": persisted,
+            })
+
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "received": len(body.names),
+            "updated": updated,
+            "results": results,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/api/alerts/rule-stats", dependencies=API_DEPS)
 async def get_alert_rule_stats(hours: int = 24):
     """Agregasi alert per-rule per-jam untuk audit sparkline (v2.7).
@@ -864,6 +960,79 @@ async def send_telegram_test():
         return {"status": "success", "sent": False, "reason": "error", "message": str(e)}
 
 
+# ===== v2.8: Webhook alert channel =====
+
+def _validate_webhook_url(raw: str) -> Dict[str, Any]:
+    """Validasi format webhook URL (v2.8).
+
+    Wajib scheme http/https + host. Path bebas (sering berisi token).
+    Return {ok, warning} - delivery nyata diverifikasi via test endpoint,
+    bukan saat apply, agar apply tidak mengirim payload test tanpa izin.
+    """
+    url = str(raw).strip()
+    if not url:
+        return {"ok": False, "warning": "must not be empty"}
+    masked = mask_webhook_url(url)
+    if not masked:
+        return {"ok": False, "warning": "invalid URL format"}
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        return {"ok": False, "warning": "scheme must be http or https"}
+    return {"ok": True, "warning": None}
+
+
+@router.get("/api/webhook/status", dependencies=API_DEPS)
+async def webhook_status():
+    """Status konfigurasi webhook (v2.8, aman untuk publik).
+
+    URL TIDAK PERNAH dikirim utuh - hanya scheme://host. Hasil test
+    terakhir (status code / reason) disertakan bila ada.
+    """
+    dispatcher = get_webhook()
+    if dispatcher is not None and hasattr(dispatcher, "get_status"):
+        data = dispatcher.get_status()
+    else:
+        data = {"configured": False, "url_masked": None, "last_result": None}
+    return {
+        "status": "success",
+        "timestamp": _utc_now_iso(),
+        "data": data,
+    }
+
+
+@router.post("/api/webhook/test", dependencies=API_DEPS)
+async def webhook_test():
+    """Kirim payload test ke webhook untuk verifikasi delivery (v2.8).
+
+    Pengiriman gagal dianggap HASIL (bukan error endpoint): response
+    tetap status=success dengan sent=false + reason.
+    """
+    dispatcher = get_webhook()
+    if dispatcher is None or not getattr(dispatcher, "url", None):
+        return {
+            "status": "success",
+            "sent": False,
+            "reason": "not_configured",
+            "message": "Set webhook_url in settings to enable webhook delivery.",
+        }
+    try:
+        result = await dispatcher.test_send()
+        return {
+            "status": "success",
+            "sent": bool(result.get("ok")),
+            "status_code": result.get("status_code"),
+            "reason": result.get("reason"),
+            "message": (
+                "Test payload delivered - webhook responded 2xx."
+                if result.get("ok") else
+                f"Webhook test failed: {result.get('reason')}"
+            ),
+        }
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Webhook test failed: {e}")
+        return {"status": "success", "sent": False, "reason": "error", "message": str(e)}
+
+
 # ===== v2.6: Runtime settings (GET/PUT) =====
 
 async def _apply_telegram_update(key: str, value: str) -> Optional[Dict[str, Any]]:
@@ -929,6 +1098,9 @@ async def update_runtime_settings(body: SettingsUpdateRequest):
       (token tidak valid / chat id belum ada), persist TETAP dilakukan
       hanya bila token diterima Telegram (hasil ok) agar DB tidak berisi
       token mati. chat_id selalu bisa dipersist sendiri.
+    - webhook_url (v2.8) divalidasi formatnya (http/https + host),
+      dipasang ke dispatcher runtime, lalu persist terenkripsi. Delivery
+      diverifikasi terpisah lewat POST /api/webhook/test.
     """
     results: Dict[str, Any] = {}
     notifier_state: Optional[Dict[str, Any]] = None
@@ -946,10 +1118,36 @@ async def update_runtime_settings(body: SettingsUpdateRequest):
 
         value = check["value"]
         try:
-            if spec["type"] == "secret" and key == "telegram_bot_token":
+            if spec["type"] == "secret" and key in (
+                "telegram_bot_token", "webhook_url",
+            ):
                 stored_value = encrypt_secret(value)
             else:
                 stored_value = value
+
+            if key == "webhook_url":
+                # v2.8: validasi format dulu (scheme http/https + host),
+                # pasang dispatcher runtime, lalu persist. Delivery nyata
+                # diverifikasi lewat POST /api/webhook/test.
+                url_check = _validate_webhook_url(value)
+                if not url_check["ok"]:
+                    results[key] = {
+                        "ok": False,
+                        "warning": url_check["warning"],
+                    }
+                    continue
+                set_webhook(WebhookDispatcher(url=value))
+                await app_database.db.set_app_setting(key, stored_value)
+                from app import runtime_settings as _rs
+                _rs._cache[key] = stored_value
+                results[key] = {
+                    "ok": True,
+                    "applied": True,
+                    "persisted": True,
+                    "masked": mask_webhook_url(value),
+                    "warning": check["warning"],
+                }
+                continue
 
             if key == "telegram_bot_token":
                 # Terapkan dulu ke runtime; persist hanya bila token valid

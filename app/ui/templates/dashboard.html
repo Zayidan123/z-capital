@@ -1734,11 +1734,99 @@
             color: var(--muted); font-size: 0.68rem; flex-wrap: wrap;
         }
 
+        /* ===== v2.8: Bulk edit rules + webhook channel + sparkline tooltip ===== */
+        .rule-row {
+            position: relative;
+            transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+        }
+        .rule-row:hover {
+            border-color: var(--accent);
+            box-shadow: 0 2px 14px rgba(0, 0, 0, 0.22);
+        }
+        .rule-row.selected {
+            border-color: var(--accent);
+            background: rgba(0, 217, 255, 0.07);
+        }
+        body.light .rule-row.selected { background: rgba(0, 149, 189, 0.07); }
+        .rule-check {
+            width: 17px; height: 17px;
+            accent-color: var(--accent);
+            cursor: pointer; flex: 0 0 auto;
+            margin-top: 3px;
+        }
+        .rule-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+        .select-all-wrap {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 0.76rem; color: var(--muted); cursor: pointer;
+            user-select: none;
+        }
+        .select-all-wrap[hidden] { display: none; }
+        .select-all-wrap:hover { color: var(--text); }
+        .bulk-bar {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: rgba(0, 217, 255, 0.06);
+            border: 1px dashed var(--accent);
+            border-radius: 12px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            animation: bulkIn 0.22s ease;
+        }
+        /* display:flex akan menimpa rule UA [hidden] -> butuh rule penutup
+           level author agar toggle .hidden benar-benar menyembunyikan */
+        .bulk-bar[hidden] { display: none; }
+        body.light .bulk-bar { background: rgba(0, 149, 189, 0.06); }
+        @keyframes bulkIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: none; }
+        }
+        .bulk-count { font-weight: 700; color: var(--accent); font-size: 0.82rem; }
+        .bulk-bar input[type="number"] {
+            width: 120px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 7px 9px;
+            font-family: inherit;
+        }
+        .bulk-bar input[type="number"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+        .spark-wrap { position: relative; display: inline-flex; }
+        .rule-spark rect.bar { cursor: pointer; transition: fill-opacity 0.15s ease; }
+        .rule-spark rect.bar:hover { fill-opacity: 1 !important; }
+        .spark-tip {
+            position: fixed; z-index: 1200;
+            background: var(--bg-solid);
+            color: var(--text);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 0.72rem;
+            pointer-events: none;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+            opacity: 0;
+            transition: opacity 0.12s ease;
+            white-space: nowrap;
+        }
+        .spark-tip.show { opacity: 1; }
+        .spark-tip strong { color: var(--accent); }
+        .webhook-section {
+            margin-top: 16px; padding-top: 16px;
+            border-top: 1px dashed var(--card-border);
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        .webhook-title {
+            font-size: 0.85rem; font-weight: 700; color: var(--text);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .webhook-sub { color: var(--muted); font-size: 0.75rem; }
+
         @media (max-width: 640px) {
             .rule-audit { min-width: 100%; flex-direction: row; align-items: center; gap: 12px; }
             .palette-backdrop { padding-top: 6vh; }
             .import-actions { justify-content: stretch; }
             .import-actions .btn { flex: 1; }
+            .bulk-bar { align-items: stretch; flex-direction: column; }
+            .bulk-bar .btn { width: 100%; }
         }
     </style>
 </head>
@@ -1895,9 +1983,19 @@
                 <p data-i18n="rules.hint" style="color: var(--muted); font-size: 0.82rem; flex: 1; min-width: 220px;">
                     Atur ambang pemicu notifikasi. Perubahan berlaku langsung pada engine alert.
                 </p>
+                <label class="select-all-wrap" id="select-all-wrap" hidden title="Pilih semua rule yang bisa diedit (v2.8)">
+                    <input type="checkbox" class="rule-check" id="rule-select-all" aria-label="Select all editable rules">
+                    <span>All</span>
+                </label>
                 <button class="btn btn-ghost" id="rules-export-btn" title="Unduh semua rules sebagai file JSON (backup)">⬇️ JSON</button>
                 <button class="btn btn-ghost" id="rules-import-btn" title="Import threshold rules dari file/teks JSON">⬆️ Import</button>
                 <button class="btn btn-ghost" id="rules-refresh-btn" title="Muat ulang rules">🔄 Reload</button>
+            </div>
+            <div class="bulk-bar" id="bulk-bar" hidden>
+                <span class="bulk-count" id="bulk-count">0 selected</span>
+                <input type="number" min="0" step="any" id="bulk-threshold" placeholder="New threshold" aria-label="Bulk threshold value">
+                <button class="btn" id="bulk-apply-btn" title="Terapkan threshold ke semua rule terpilih">✅ Apply to selected</button>
+                <button class="btn btn-ghost" id="bulk-clear-btn" title="Kosongkan pilihan">✕ Clear</button>
             </div>
             <div class="rules-list" id="rules-list">
                 <p style="color: var(--muted); font-size: 0.85rem;">Loading alert rules…</p>
@@ -1961,6 +2059,37 @@
                 <div class="browser-notif-text">
                     <strong>Browser notifications</strong>
                     <span id="browser-notif-state">checking…</span>
+                </div>
+            </div>
+            <!-- v2.8: Webhook alert channel -->
+            <div class="webhook-section" id="webhook-section">
+                <div class="webhook-title">🔗 Webhook Channel <span class="webhook-sub" data-i18n="webhook.sub">POST JSON alert payloads to any HTTP endpoint</span></div>
+                <div class="tg-status" id="wh-status">
+                    <div class="tg-chip warn" id="wh-chip-url">
+                        <span class="tg-emoji">🌐</span>
+                        <span class="tg-chip-body">
+                            <span class="tg-chip-label">Endpoint</span>
+                            <span class="tg-chip-value dim" id="wh-url-value">checking…</span>
+                        </span>
+                    </div>
+                    <div class="tg-chip warn" id="wh-chip-last">
+                        <span class="tg-emoji">📡</span>
+                        <span class="tg-chip-body">
+                            <span class="tg-chip-label">Last delivery</span>
+                            <span class="tg-chip-value dim" id="wh-last-value">—</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="tg-runtime">
+                    <div class="tg-field">
+                        <label for="wh-url-input">Webhook URL (write-only)</label>
+                        <input type="password" id="wh-url-input" placeholder="https://hooks.example.com/…" autocomplete="off">
+                        <span class="field-sub">Tersimpan terenkripsi; hanya scheme://host yang tampil. Alert POST sebagai JSON.</span>
+                    </div>
+                    <button class="btn" id="wh-apply-btn" title="Simpan + aktifkan webhook tanpa restart">💾 Apply</button>
+                </div>
+                <div>
+                    <button class="btn btn-ghost" id="wh-test-btn" title="Kirim payload test ke webhook">🔗 Send Test Payload</button>
                 </div>
             </div>
             <button class="btn" id="tg-test-btn">📨 Send Test Message</button>
@@ -2095,7 +2224,7 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.7 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.8 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
                 <span><span class="kbd">Ctrl K</span> commands</span>
                 <span><span class="kbd">R</span> refresh</span>
@@ -2846,6 +2975,7 @@
 
         // ===== v2.3: Alert rules =====
         // v2.7: sparkline audit per-rule (jumlah alert/jam, window 24h)
+        // v2.8: bar memakai class .bar + data-attrs utk custom tooltip
         function renderRuleAudit(st) {
             if (!st) return `<span class="rule-spark-meta never">no fire data (24h)</span>`;
             const buckets = st.buckets || [];
@@ -2861,7 +2991,8 @@
                 const x = i * (bw + 1);
                 const y = Hh - h;
                 const op = (0.35 + 0.65 * (c / maxC)).toFixed(2);
-                bars += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="1.5" fill="var(--accent)" fill-opacity="${op}"><title>${c} alert(s) at ${escapeHtml(String(b.hour || '').slice(11, 16))} UTC</title></rect>`;
+                const hh = escapeHtml(String(b.hour || '').slice(11, 16));
+                bars += `<rect class="bar" data-c="${c}" data-h="${hh}" x="${x}" y="${y}" width="${bw}" height="${h}" rx="1.5" fill="var(--accent)" fill-opacity="${op}" role="img" aria-label="${c} alert(s) at ${hh} UTC"></rect>`;
             });
             const lastRel = st.last_fired ? relativeTime(st.last_fired) : 'never';
             const meta = `<span class="rule-spark-meta"><strong>${st.total}</strong> fires/24h &bull; last: ${lastRel}</span>`;
@@ -2898,6 +3029,7 @@
                 rules.forEach(rule => {
                     const row = document.createElement('div');
                     row.className = 'rule-row';
+                    if (bulkSelected.has(rule.name)) row.classList.add('selected');
                     const priorityClass = `priority-${String(rule.priority || 'low').toLowerCase()}`;
                     const channels = (rule.channels || []).map(c => `<span class="channel-chip">${escapeHtml(c)}</span>`).join('');
                     const thresholdInput = rule.editable
@@ -2907,8 +3039,13 @@
                     const thresholdLabel = rule.threshold_key
                         ? `<span class="rule-key">${escapeHtml(rule.threshold_key)} &gt; threshold</span>` : '';
                     const auditHtml = renderRuleAudit(statsMap[rule.name]);
+                    // v2.8: checkbox pilihan utk bulk edit (hanya rule editable)
+                    const checkHtml = rule.editable
+                        ? `<input type="checkbox" class="rule-check" data-check="${escapeHtml(rule.name)}" aria-label="Select rule ${escapeHtml(rule.name)} for bulk edit" ${bulkSelected.has(rule.name) ? 'checked' : ''}>`
+                        : '';
 
                     row.innerHTML = `
+                        ${checkHtml}
                         <div class="rule-info">
                             <span><span class="rule-name">${escapeHtml(rule.name)}</span>
                             <span class="priority-badge ${priorityClass}">${escapeHtml(rule.priority)}</span></span>
@@ -2925,6 +3062,19 @@
                 list.querySelectorAll('[data-save]').forEach(btn => {
                     btn.addEventListener('click', () => saveRuleThreshold(btn.dataset.save));
                 });
+
+                // v2.8: wire checkbox bulk-edit + tampilkan select-all
+                const selWrap = document.getElementById('select-all-wrap');
+                if (selWrap) selWrap.hidden = !rules.some(r => r.editable);
+                list.querySelectorAll('[data-check]').forEach(cb => {
+                    cb.addEventListener('change', () => {
+                        if (cb.checked) bulkSelected.add(cb.dataset.check);
+                        else bulkSelected.delete(cb.dataset.check);
+                        cb.closest('.rule-row').classList.toggle('selected', cb.checked);
+                        updateBulkBar();
+                    });
+                });
+                syncSelectAllState();
             } catch (error) {
                 console.error('Alert rules error:', error);
                 list.innerHTML = `<p style="color: var(--danger); font-size: 0.85rem;">Failed to load rules: ${escapeHtml(error.message)}</p>`;
@@ -2955,6 +3105,192 @@
             } catch (error) {
                 console.error('Rule update error:', error);
                 toast(`Failed to update rule: ${error.message}`, 'error');
+            }
+        }
+
+        // ===== v2.8: Bulk edit rules =====
+        const bulkSelected = new Set();
+
+        function updateBulkBar() {
+            const bar = document.getElementById('bulk-bar');
+            const count = document.getElementById('bulk-count');
+            if (!bar || !count) return;
+            bar.hidden = bulkSelected.size === 0;
+            count.textContent = `${bulkSelected.size} selected`;
+            // Bersihkan nama rule yang sudah tidak ada (mis. setelah reload)
+            if (bulkSelected.size) {
+                const live = new Set(
+                    [...document.querySelectorAll('#rules-list [data-check]')].map(cb => cb.dataset.check)
+                );
+                [...bulkSelected].forEach(n => { if (!live.has(n)) bulkSelected.delete(n); });
+                if (count.textContent !== `${bulkSelected.size} selected`) {
+                    count.textContent = `${bulkSelected.size} selected`;
+                    bar.hidden = bulkSelected.size === 0;
+                }
+            }
+        }
+
+        function syncSelectAllState() {
+            const all = document.getElementById('rule-select-all');
+            if (!all) return;
+            const boxes = [...document.querySelectorAll('#rules-list [data-check]')];
+            const checked = boxes.filter(cb => cb.checked).length;
+            all.checked = boxes.length > 0 && checked === boxes.length;
+            all.indeterminate = checked > 0 && checked < boxes.length;
+        }
+
+        async function applyBulkThreshold() {
+            const input = document.getElementById('bulk-threshold');
+            const value = parseFloat(input && input.value);
+            if (!isFinite(value) || value < 0) {
+                toast('Bulk threshold must be a number ≥ 0', 'warn');
+                return;
+            }
+            if (!bulkSelected.size) {
+                toast('No rules selected', 'warn');
+                return;
+            }
+            const names = [...bulkSelected];
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/rules/bulk`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ names, threshold: value }),
+                });
+                const data = await res.json();
+                if (res.status === 400) throw new Error(data.detail || 'Bulk update rejected');
+                if (data.status !== 'success') throw new Error(data.message || 'Bulk update failed');
+                const updated = data.updated || 0;
+                toast(`Bulk update: ${updated}/${names.length} rule(s) → threshold ${value}`, 'success');
+                addLog(`Bulk rule update: ${updated}/${names.length} rules = ${value}`, 'success');
+                bulkSelected.clear();
+                await loadAlertRules();
+                updateBulkBar();
+            } catch (error) {
+                console.error('Bulk update error:', error);
+                toast(`Bulk update failed: ${error.message}`, 'error');
+            }
+        }
+
+        function clearBulkSelection() {
+            bulkSelected.clear();
+            document.querySelectorAll('#rules-list [data-check]').forEach(cb => {
+                cb.checked = false;
+                cb.closest('.rule-row').classList.remove('selected');
+            });
+            syncSelectAllState();
+            updateBulkBar();
+        }
+
+        // ===== v2.8: Sparkline custom tooltip (mengganti <title> native) =====
+        let sparkTipEl = null;
+        let sparkTipTimer = null;
+        function ensureSparkTip() {
+            if (!sparkTipEl) {
+                sparkTipEl = document.createElement('div');
+                sparkTipEl.className = 'spark-tip';
+                sparkTipEl.setAttribute('role', 'tooltip');
+                sparkTipEl.hidden = true;
+                document.body.appendChild(sparkTipEl);
+            }
+            return sparkTipEl;
+        }
+        function hideSparkTip() {
+            if (sparkTipTimer) { clearTimeout(sparkTipTimer); sparkTipTimer = null; }
+            if (sparkTipEl) {
+                sparkTipEl.classList.remove('show');
+                sparkTipEl.hidden = true;
+            }
+        }
+        function scheduleSparkTipAutoHide() {
+            if (sparkTipTimer) clearTimeout(sparkTipTimer);
+            sparkTipTimer = setTimeout(hideSparkTip, 2500);
+        }
+
+        // ===== v2.8: Webhook channel =====
+        async function loadWebhookStatus() {
+            const urlVal = document.getElementById('wh-url-value');
+            const lastVal = document.getElementById('wh-last-value');
+            const urlChip = document.getElementById('wh-chip-url');
+            try {
+                const res = await fetch(`${API_BASE}/api/webhook/status`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'status failed');
+                const d = data.data || {};
+                const configured = !!d.configured;
+                urlVal.textContent = configured ? (d.url_masked || 'configured') : 'not configured';
+                urlChip.classList.toggle('ok', configured);
+                urlChip.classList.toggle('warn', !configured);
+                const lr = d.last_result;
+                if (lr) {
+                    const ok = !!lr.ok;
+                    lastVal.textContent = ok
+                        ? `OK (${lr.status_code})`
+                        : `failed: ${lr.reason || 'unknown'}`;
+                    lastVal.classList.toggle('dim', false);
+                    const lastChip = document.getElementById('wh-chip-last');
+                    lastChip.classList.toggle('ok', ok);
+                    lastChip.classList.toggle('warn', !ok);
+                } else {
+                    lastVal.textContent = '—';
+                }
+                const stamp = document.getElementById('tg-updated');
+                if (stamp) stamp.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Webhook status error:', error);
+                urlVal.textContent = 'unavailable';
+            }
+        }
+
+        async function applyWebhook() {
+            const input = document.getElementById('wh-url-input');
+            const url = (input.value || '').trim();
+            if (!url) {
+                toast('Webhook URL must not be empty', 'warn');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/api/settings`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: { webhook_url: url } }),
+                });
+                const data = await res.json();
+                const result = (data.results || {})['webhook_url'];
+                if (!result || !result.ok) {
+                    throw new Error((result && result.warning) || 'Webhook rejected');
+                }
+                input.value = '';
+                toast(`Webhook active → ${result.masked || 'endpoint'}`, 'success');
+                addLog(`Webhook channel configured: ${result.masked || 'endpoint'}`, 'success');
+                loadWebhookStatus();
+                loadSettings();
+            } catch (error) {
+                console.error('Webhook apply error:', error);
+                toast(`Webhook apply failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testWebhook() {
+            const btn = document.getElementById('wh-test-btn');
+            const orig = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '📡 Sending…'; }
+            try {
+                const res = await fetch(`${API_BASE}/api/webhook/test`, { method: 'POST' });
+                const data = await res.json();
+                if (data.sent) {
+                    toast(`Webhook test delivered (${data.status_code})`, 'success');
+                    addLog('Webhook test payload delivered', 'success');
+                } else {
+                    toast(`Webhook test: ${data.reason || data.message || 'failed'}`, 'warn');
+                    addLog(`Webhook test result: ${data.reason || 'failed'}`, 'warn');
+                }
+                loadWebhookStatus();
+            } catch (error) {
+                console.error('Webhook test error:', error);
+                toast(`Webhook test failed: ${error.message}`, 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = orig; }
             }
         }
 
@@ -3894,6 +4230,53 @@
             toast('Notification status refreshed', 'info');
         });
         document.getElementById('tg-test-btn').addEventListener('click', sendTelegramTest);
+
+        // ===== v2.8: Wiring bulk edit + webhook =====
+        document.getElementById('bulk-apply-btn').addEventListener('click', applyBulkThreshold);
+        document.getElementById('bulk-clear-btn').addEventListener('click', clearBulkSelection);
+        document.getElementById('bulk-threshold').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); applyBulkThreshold(); }
+        });
+        document.getElementById('rule-select-all').addEventListener('change', (e) => {
+            const checked = e.target.checked;
+            const boxes = [...document.querySelectorAll('#rules-list [data-check]')];
+            boxes.forEach(cb => {
+                cb.checked = checked;
+                cb.closest('.rule-row').classList.toggle('selected', checked);
+                if (checked) bulkSelected.add(cb.dataset.check);
+                else bulkSelected.delete(cb.dataset.check);
+            });
+            updateBulkBar();
+        });
+        document.getElementById('wh-apply-btn').addEventListener('click', applyWebhook);
+        document.getElementById('wh-url-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); applyWebhook(); }
+        });
+        document.getElementById('wh-test-btn').addEventListener('click', testWebhook);
+
+        // v2.8: delegasi hover sparkline bar → custom tooltip
+        const rulesListEl = document.getElementById('rules-list');
+        rulesListEl.addEventListener('mouseover', (e) => {
+            const rect = e.target.closest('rect.bar');
+            if (!rect) return;
+            const tip = ensureSparkTip();
+            const c = rect.dataset.c || '0';
+            const h = rect.dataset.h || '';
+            tip.innerHTML = `<strong>${c}</strong> alert(s) at ${h} UTC`;
+            tip.hidden = false;
+            const r = rect.getBoundingClientRect();
+            const top = r.top - 34;
+            const left = Math.max(6, Math.min(r.left + r.width / 2 - 46, window.innerWidth - 140));
+            tip.style.top = `${Math.max(4, top)}px`;
+            tip.style.left = `${left}px`;
+            requestAnimationFrame(() => tip.classList.add('show'));
+            scheduleSparkTipAutoHide();
+        });
+        rulesListEl.addEventListener('mouseout', (e) => {
+            if (e.target.closest && e.target.closest('rect.bar')) hideSparkTip();
+        });
+        rulesListEl.addEventListener('mouseleave', hideSparkTip);
+        window.addEventListener('scroll', hideSparkTip, { passive: true });
         document.getElementById('ret-refresh-btn').addEventListener('click', () => {
             loadRetention();
             toast('Retention info refreshed', 'info');
@@ -4024,9 +4407,11 @@
                 { icon: '\u23f1\ufe0f', label: 'Toggle auto-refresh', hint: 'A', fn: () => { setAutoRefresh(!autoRefresh); toast(`Auto-refresh ${autoRefresh ? 'enabled' : 'disabled'}`, 'info'); } },
                 { icon: '\ud83d\udd14', label: 'Reload alert rules + audit', fn: loadAlertRules },
                 { icon: '\ud83d\udea8', label: 'Refresh alert history', hint: 'H', fn: () => { loadAlertHistory(); toast('Alert history refreshed', 'info'); } },
-                { icon: '\ud83e\uddf9', label: 'Refresh maintenance panels', hint: 'M', fn: () => { loadHeatmap(); loadRetention(); loadTelegramStatus(); toast('Maintenance panels refreshed', 'info'); } },
+                { icon: '\ud83e\uddf9', label: 'Refresh maintenance panels', hint: 'M', fn: () => { loadHeatmap(); loadRetention(); loadTelegramStatus(); loadWebhookStatus(); toast('Maintenance panels refreshed', 'info'); } },
                 { icon: '\u2699\ufe0f', label: 'Reload runtime settings', hint: 'S', fn: () => { loadSettings(); toast('Runtime settings reloaded', 'info'); } },
                 { icon: '\ud83d\udce8', label: 'Send Telegram test message', fn: sendTelegramTest },
+                { icon: '\ud83d\udd17', label: 'Send webhook test payload', fn: testWebhook },
+                { icon: '\u2705', label: 'Apply bulk threshold to selected rules', fn: () => { const b = document.getElementById('bulk-bar'); if (b && !b.hidden) applyBulkThreshold(); else toast('Select rules first (checkbox on each rule)', 'warn'); } },
                 { icon: '\ud83d\udda5\ufe0f', label: 'Toggle browser notifications', hint: 'N', fn: toggleBrowserNotif },
                 { icon: '\ud83d\udcc4', label: 'Export signals CSV', fn: () => { window.location.href = `${API_BASE}/api/export/signals.csv`; toast('Signals CSV downloaded', 'success'); } },
                 { icon: '\ud83d\dd25', label: 'Export heat map CSV', fn: () => { window.location.href = `${API_BASE}/api/alerts/heatmap.csv?hours=${heatmapHours}`; toast('Heat map CSV downloaded', 'success'); } },
@@ -4131,6 +4516,7 @@
             'import.title':   { en: '\u2b06\ufe0f Import Alert Rules', id: '\u2b06\ufe0f Impor Aturan Alert' },
             'import.sub':     { en: 'Paste exported JSON below, or pick a .json file', id: 'Tempel JSON export di bawah, atau pilih file .json' },
             'import.run':     { en: '\ud83d\udce5 Import Rules', id: '\ud83d\udce5 Impor Rules' },
+            'webhook.sub':    { en: 'POST JSON alert payloads to any HTTP endpoint', id: 'Kirim payload alert JSON ke endpoint HTTP apa pun' },
         };
         function applyI18n() {
             document.querySelectorAll('[data-i18n]').forEach(el => {
@@ -4174,6 +4560,7 @@
             loadAlertRules();
             loadAlertHistory();
             loadTelegramStatus(); // v2.5
+            loadWebhookStatus();  // v2.8
             loadSettings();       // v2.6
             loadNotifPref();      // v2.6
             updateOfflineBanner(); // v2.6

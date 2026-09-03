@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.7
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.8
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-266%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-308%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -73,7 +73,7 @@ z-capital/
 │   ├── notifier.py       # Telegram bot notifications
 │   ├── logging_config.py # Structured logging (JSON + console)
 │   └── main.py           # Orchestrator + FastAPI app
-├── tests/                # Test suite lengkap (266 tests, semua mock - tanpa DB/network)
+├── tests/                # Test suite lengkap (308 tests, semua mock - tanpa DB/network)
 ├── scripts/deploy.sh     # Deployment helper
 ├── Dockerfile            # Multi-stage build, non-root user, healthcheck
 ├── docker-compose.yml    # PostgreSQL + Redis (optional) + App
@@ -191,6 +191,9 @@ docker compose logs -f app
 | `/dashboard/api/alerts/rule-stats` | GET | **v2.7** Agregasi alert per-rule per-jam untuk audit sparkline (`?hours=1..168`; slot jam kosong diisi 0, `total` + `last_fired` per rule) |
 | `/dashboard/api/alerts/rules/export` | GET | **v2.7** Export semua alert rules sebagai file JSON attachment (backup/migrasi antar instans) |
 | `/dashboard/api/alerts/rules/import` | POST | **v2.7** Bulk import threshold rules dari JSON export (status per-item: `updated`/`unknown`/`not_editable`/`invalid_threshold` — satu item jelek tidak menggagalkan batch) |
+| `/dashboard/api/alerts/rules/bulk` | POST | **v2.8** Terapkan SATU threshold ke banyak rule sekaligus (body `{"names": [1..50 nama], "threshold": >= 0}`; status per-item konsisten dgn import; NaN/Infinity/negatif ditolak 400) |
+| `/dashboard/api/webhook/status` | GET | **v2.8** Status channel webhook (flag configured, host tersamarkan `scheme://host` - path/query TIDAK pernah bocor, hasil delivery terakhir) |
+| `/dashboard/api/webhook/test` | POST | **v2.8** Kirim payload test JSON ke webhook terkonfigurasi (gagal delivery = hasil `sent:false` + reason, bukan error endpoint) |
 | `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`; **v2.6 filter `?symbol=` & `?hours=`** untuk click-to-filter, `?limit=1..200`) |
 | `/dashboard/api/alerts/heatmap` | GET | Agregasi alert per-symbol per-jam untuk heat map (`?hours=6..168`) |
 | `/dashboard/api/alerts/heatmap.csv` | GET | **v2.6** Export agregasi heat map sebagai CSV (`?hours=6..168`; kolom symbol/hour/alert_count/severity) |
@@ -245,7 +248,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 266 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, **rule-stats + export/import rules JSON v2.7**, integrasi pipeline anomaly → alert → WebSocket, loop housekeeping retensi yang membaca **override runtime**, dan **regression guard selector CSS atribut hidden bentuk valid (v2.7): selector `[hidden]`**).
+**Status saat ini: 308 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure + **WebhookDispatcher v2.8**: payload test/alert, masking URL, dispatch sukses/gagal/timeout via transport injeksi), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, **rule-stats + export/import rules JSON v2.7**, **webhook channel + bulk edit rules v2.8** (validasi format URL, persist terenkripsi, masking scheme://host, status per-item bulk, pipeline alert-callback-webhook dispatch), loop housekeeping retensi yang membaca **override runtime**, dan **regression guard selector CSS atribut hidden bentuk valid + wajib rule author [hidden] utk elemen flex (v2.7/v2.8)**).
 
 ---
 
@@ -347,6 +350,14 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
 - **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
 - **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
+
+### ✨ v2.8 — Webhook Alert Channel, Bulk Edit Rules & Sparkline Tooltip
+- **🔗 Channel notifikasi webhook** — alert ter-trigger kini bisa dikirim sebagai JSON POST ke endpoint HTTP arbitrary: `WebhookDispatcher` di `app/notifier.py` (timeout ketat 10s, hasil `{ok, status_code, reason}`, TIDAK pernah raise — kegagalan webhook tidak pernah memengaruhi pipeline utama), dipanggil fire-and-forget dari callback alert (`main._broadcast_alert`); URL dikonfigurasi via runtime settings (`webhook_url`, write-only + **terenkripsi Fernet**, tervalidasi format http/https + host saat apply), di-restore otomatis saat restart (best-effort); payload `{source, type: alert.triggered|alert.test, timestamp, alert:{rule, priority, symbol, channels, data}}` + header `X-ZCapital-Event`; UI panel Webhook Channel di Notification Settings (chip endpoint tersamarkan **scheme://host** — path sering berisi token rahasia, chip hasil delivery terakhir, form apply, tombol Send Test Payload), endpoint `GET /api/webhook/status` + `POST /api/webhook/test`; aksi palette "Send webhook test payload"
+- **✅ Bulk edit alert rules** — checkbox per rule editable + select-all (indeterminate di tengah) + bulk bar animasi: terapkan SATU threshold ke banyak rule sekaligus via `POST /api/alerts/rules/bulk` (1..50 nama, status per-item konsisten dgn import: `updated`/`unknown`/`not_editable`/`invalid_name`, NaN/Infinity/negatif ditolak 400, gagal persist DB tetap update in-memory dengan flag `persisted:false`); Enter di input = apply; toast ringkasan `N/M rule(s) -> threshold X`; aksi palette "Apply bulk threshold"
+- **💡 Sparkline tooltip custom** — tooltip mengambang menggantikan title native (tampil seketika, auto-hide 2.5s, hilang saat mouse leave/scroll, posisi clamp ke viewport); bar sparkline kini punya hover effect (fill-opacity 1) + `role=img` + `aria-label` per bar utk screen reader
+- **🐟 Fix bug CSS [hidden] vs display:flex (QA visual)** — bulk bar & select-all wrap memakai `display:flex` yang MENIMPA rule UA `[hidden]{display:none}` sehingga tetap tampil walau atribut hidden terpasang (bulk bar "0 selected" selalu tampak); diperbaiki dgn rule author `.bulk-bar[hidden]`/`.select-all-wrap[hidden] {display:none}` + guard test baru mewajibkan elemen flex punya rule `[hidden]` level author — kelas regresi yang sama dgn bug backdrop modal v2.3, kali ini tertangkap sebelum push berkat screenshot QA
+- **🎨 Styling** — rule row hover (border accent + shadow lembut, transisi 0.18s) + state `.selected` (border + latar cyan tipis, versi light theme), checkbox custom accent-color + `focus-visible` ring, bulk bar dashed accent + animasi bulkIn + layout stack di mobile, section webhook dengan divider dashed + chip status ok/warn konsisten dgn panel Telegram, footer v2.8
+- **+42 test baru** — WebhookDispatcher (payload test/alert + header, masking URL tidak bocor, dispatch 2xx/5xx/timeout/connection-refused/not-configured via `httpx.MockTransport`), spec + masking settings, endpoint status/test (belum/benar terkonfigurasi, transport injeksi), PUT webhook_url (apply + persist terenkripsi + cache, tolak scheme invalid/tanpa host), GET settings masked, bulk endpoint (2 rule sukses + persist, mixed status, NaN/Infinity raw-body -> 400, negatif -> 400, kosong/51 nama -> 422, whitespace -> invalid_name, persist gagal -> tetap update memori), **pipeline alert->callback->webhook dispatch** (fire-and-forget verified), guard HTML v2.8 (bulk bar, webhook section, tooltip, selector [hidden] flex) -> total **308 tests**
 
 ### ✨ v2.7 — Rule Audit Sparkline, Import/Export Rules, Command Palette & i18n
 - **📊 Audit sparkline per-rule** — setiap baris di panel Alert Rules kini menampilkan mini bar chart 24 jam (endpoint `/api/alerts/rule-stats?hours=1..168`: agregasi per-rule per-jam dari `alert_history`, slot jam kosong diisi 0) + meta jumlah fire/24h + waktu fire terakhir relatif; rules tanpa data tampil "no fire data"
