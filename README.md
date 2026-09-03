@@ -275,7 +275,7 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **Graceful shutdown** semua komponen dibungkus try/except; `BinanceStreamer.stop()` membatalkan cooldown tasks; websocket close aman
 - **WebSocket broadcast** dengan pembersihan koneksi mati yang aman (mencegah `ValueError: list.remove`)
 - **Uptime dashboard** dihitung riil (bukan selalu 0) dan live feed anomaly/signal dikirim ke dashboard via WebSocket
-- **Ukuran dependency** diperkecil: `nltk` & `scikit-learn` dihapus (tidak pernah dipakai), `pytz` diganti stdlib `zoneinfo`
+- **Ukuran dependency** diperkecil: `scikit-learn` & `pytz` dihapus (tidak dipakai, `pytz` diganti stdlib `zoneinfo`)
 - **Pydantic v2** migration: `class Config` → `model_config = SettingsConfigDict(...)` (menghilangkan deprecation warning)
 - **`datetime.utcnow()`** (deprecated di Python 3.12) diganti `datetime.now(timezone.utc)` di seluruh codebase
 - **XSS protection** di dashboard (escapeHtml untuk semua data dinamis) + exponential backoff untuk reconnect WebSocket

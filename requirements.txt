@@ -39,6 +39,9 @@ pytest>=7.4.0
 pytest-asyncio>=0.23.0
 pytest-cov>=4.1.0
 
+# NLP for Sentiment Analysis (dipakai CI workflow untuk NLTK data download)
+nltk>=3.8.0
+
 # Timezone support
 tzdata>=2023.3
 

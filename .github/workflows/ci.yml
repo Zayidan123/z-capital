@@ -56,6 +56,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
+    - name: Download NLTK data
+      run: |
+        python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); nltk.download('vader_lexicon', quiet=True)"
+    
     - name: Run security audit (dependency scan)
       run: |
         echo "Running dependency security scan..."
