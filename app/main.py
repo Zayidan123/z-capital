@@ -20,7 +20,13 @@ from app.database import Database, get_database
 from app.streamer import BinanceStreamer
 from app.analyzer import DeepDiveAnalyzer
 from app.notifier import TelegramNotifier
-from app.ui.routes import router as ui_router, broadcast_update, get_alert_system
+from app.ui.routes import (
+    router as ui_router,
+    broadcast_update,
+    get_alert_system,
+    set_notifier,
+    record_prune_result,
+)
 
 # Configure logging
 logging.basicConfig(
@@ -96,6 +102,10 @@ class CryptoOracleApp:
         await self.notifier.start()
         logger.info("Notifier initialized")
 
+        # v2.5: pasang notifier ke dashboard routes agar panel Telegram
+        # (status + test-send) memakai instance yang benar-benar berjalan.
+        set_notifier(self.notifier)
+
         # Initialize analyzer
         self.analyzer = DeepDiveAnalyzer(self.db)
         await self.analyzer.start()
@@ -146,6 +156,41 @@ class CryptoOracleApp:
             })
         except Exception as e:
             logger.warning(f"Failed to broadcast alert: {e}")
+
+    # ===== v2.5: Retensi alert_history (housekeeping otomatis) =====
+
+    async def _prune_alert_history_once(self) -> Optional[int]:
+        """Jalankan satu siklus prune alert_history sesuai konfigurasi.
+
+        Returns:
+            Jumlah baris terhapus, None bila auto-prune dimatikan (0 hari).
+        """
+        days = int(self.settings.alert_history_retention_days or 0)
+        if days <= 0:
+            return None
+        deleted = await self.db.prune_alert_history(days)
+        record_prune_result(_utc_now().isoformat(), deleted)
+        if deleted:
+            logger.info(f"Alert retention: pruned {deleted} rows (>{days} days old)")
+        return deleted
+
+    async def _alert_retention_loop(self, interval_minutes: int = 60) -> None:
+        """Loop background: prune alert_history secara periodik.
+
+        Interval minimum efektif 1 menit agar konfigurasi salah tidak
+        menyebabkan spin-loop. Error prune dicatat lalu dicoba lagi
+        pada siklus berikutnya (loop tidak pernah mati karena error DB).
+        """
+        interval = max(1, int(interval_minutes or 1)) * 60
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                try:
+                    await self._prune_alert_history_once()
+                except Exception as e:
+                    logger.warning(f"Alert retention prune failed: {e}")
+        except asyncio.CancelledError:
+            logger.debug("Alert retention loop cancelled")
 
     async def _handle_anomaly(self, anomaly_data: dict) -> None:
         """
@@ -270,6 +315,14 @@ async def lifespan(app: FastAPI):
     # Dorong stats terbaru ke dashboard via WebSocket setiap 30 detik
     app_instance._spawn_background_task(app_instance._stats_broadcast_loop(30))
 
+    # v2.5: housekeeping alert_history - hapus baris lebih tua dari
+    # alert_history_retention_days secara periodik (0 hari = off)
+    app_instance._spawn_background_task(
+        app_instance._alert_retention_loop(
+            app_instance.settings.alert_retention_interval_minutes
+        )
+    )
+
     yield
 
     # Shutdown
@@ -281,7 +334,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crypto Oracle AI",
     description="Decentralized Pump/Dump Detection System",
-    version="2.0.0",
+    version="2.5.0",
     lifespan=lifespan
 )
 
@@ -309,7 +362,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "name": "Crypto Oracle AI",
-        "version": "2.0.0",
+        "version": "2.5.0",
         "description": "Decentralized Pump/Dump Detection System with Enterprise Security",
         "endpoints": {
             "/health": "Health check endpoint",

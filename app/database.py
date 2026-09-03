@@ -393,6 +393,77 @@ class Database:
                 history.append(item)
             return history
 
+    # ===== v2.5: Retensi (housekeeping) & agregasi alert =====
+
+    async def prune_alert_history(self, retention_days: int) -> int:
+        """Hapus alert_history lebih tua dari `retention_days` hari.
+
+        Returns:
+            Jumlah baris yang terhapus. 0 jika retention_days <= 0
+            (tidak menjalankan DELETE sama sekali).
+        """
+        days = int(retention_days)
+        if days <= 0:
+            return 0
+        async with self.get_connection() as conn:
+            status = await conn.execute(
+                """
+                DELETE FROM alert_history
+                WHERE timestamp < NOW() - make_interval(days => $1)
+                """,
+                days,
+            )
+            # asyncpg execute() mengembalikan tag status, mis. "DELETE 12"
+            if isinstance(status, str) and status.startswith("DELETE"):
+                try:
+                    return int(status.split()[-1])
+                except (ValueError, IndexError):
+                    return 0
+            return 0
+
+    async def get_alert_heatmap(self, hours: int = 24) -> List[Dict[str, Any]]:
+        """Agregasi alert per-symbol per-jam untuk heat map dashboard.
+
+        Args:
+            hours: jendela waktu berapa jam ke belakang.
+
+        Returns:
+            List baris {symbol, hour, count, max_priority} diurutkan
+            per symbol lalu per jam.
+        """
+        window = max(1, min(int(hours), 720))
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    symbol,
+                    date_trunc('hour', timestamp) AS hour,
+                    COUNT(*)::int AS count,
+                    MAX(CASE priority
+                        WHEN 'HIGH' THEN 2
+                        WHEN 'MEDIUM' THEN 1
+                        ELSE 0 END)::int AS severity
+                FROM alert_history
+                WHERE timestamp > NOW() - make_interval(hours => $1)
+                GROUP BY symbol, date_trunc('hour', timestamp)
+                ORDER BY symbol ASC, hour ASC
+                """,
+                window,
+            )
+            return [dict(row) for row in rows]
+
+    async def get_alert_history_stats(self) -> Dict[str, Any]:
+        """Statistik tabel alert_history untuk panel retensi dashboard."""
+        async with self.get_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT COUNT(*)::int AS total_alerts,
+                       MIN(timestamp) AS oldest_alert
+                FROM alert_history
+                """
+            )
+            return dict(row) if row else {"total_alerts": 0, "oldest_alert": None}
+
     async def get_recent_signals(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent signals from the database"""
         async with self.get_connection() as conn:

@@ -39,6 +39,15 @@ _SERVICE_START_TIME = time.monotonic()
 _alert_system: Optional[AlertSystem] = None
 _backtest_engine: Optional[BacktestEngine] = None
 
+# v2.5: holder notifier (dipasang oleh main.initialize agar endpoint
+# /api/telegram/* bisa memakai instance yang benar-benar berjalan).
+# Token TIDAK pernah dikirim ke client - hanya status metadata.
+_notifier: Optional[Any] = None
+
+# v2.5: hasil prune terakhir (diisi oleh loop retensi di main.py atau
+# endpoint manual POST /api/alerts/prune) untuk panel maintenance.
+_last_prune: Optional[Dict[str, Any]] = None
+
 
 def get_alert_system() -> AlertSystem:
     """Lazy singleton AlertSystem (tanpa load persistensi; sync aman dipakai
@@ -74,9 +83,28 @@ def get_backtest_engine() -> BacktestEngine:
 
 def reset_engines() -> None:
     """Reset singleton engines (untuk testing)."""
-    global _alert_system, _backtest_engine
+    global _alert_system, _backtest_engine, _notifier, _last_prune
     _alert_system = None
     _backtest_engine = None
+    _notifier = None
+    _last_prune = None
+
+
+def set_notifier(notifier: Any) -> None:
+    """Pasang instance TelegramNotifier yang dipakai pipeline utama (v2.5)."""
+    global _notifier
+    _notifier = notifier
+
+
+def get_notifier() -> Optional[Any]:
+    """Ambil notifier yang terpasang (None bila belum di-initialize)."""
+    return _notifier
+
+
+def record_prune_result(at_iso: str, rows_deleted: int) -> None:
+    """Simpan hasil prune terakhir untuk ditampilkan di panel retention."""
+    global _last_prune
+    _last_prune = {"at": at_iso, "rows": int(rows_deleted)}
 
 
 class RuleUpdateRequest(BaseModel):
@@ -90,6 +118,14 @@ class BacktestRequest(BaseModel):
     volume_threshold: float = Field(
         default=300.0, ge=10, le=10000,
         description="Ambang volume spike %% (10-10000)",
+    )
+
+
+class PruneRequest(BaseModel):
+    """Body opsional POST /api/alerts/prune (v2.5)"""
+    days: Optional[int] = Field(
+        default=None, ge=1, le=365,
+        description="Retensi manual (hari). Default: pengaturan retention.",
     )
 
 # Path template relatif terhadap file ini (bukan hard-coded /app)
@@ -405,6 +441,182 @@ async def get_alert_history(limit: int = 25):
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/alerts/heatmap", dependencies=API_DEPS)
+async def get_alert_heatmap(hours: int = 24):
+    """Agregasi alert per-symbol per-jam untuk heat map dashboard (v2.5).
+
+    - hours di-clamp 6..168 (minimal 6 jam, maksimal 7 hari per request)
+    - Response: per-symbol {total, severity maksimum, cells[{hour, count}]}
+      diurutkan dari symbol paling aktif.
+    """
+    try:
+        window = max(6, min(hours, 168))
+        rows = await app_database.db.get_alert_heatmap(hours=window)
+
+        grouped: Dict[str, Dict[str, Any]] = {}
+        max_count = 0
+        for r in rows:
+            sym = str(r.get("symbol") or "UNKNOWN")
+            hour = r.get("hour")
+            hour_iso = hour.isoformat() if hasattr(hour, "isoformat") else str(hour)
+            cnt = int(r.get("count") or 0)
+            sev = int(r.get("severity") or 0)
+            max_count = max(max_count, cnt)
+            entry = grouped.setdefault(
+                sym, {"symbol": sym, "total": 0, "severity": 0, "cells": []}
+            )
+            entry["cells"].append({"hour": hour_iso, "count": cnt})
+            entry["total"] += cnt
+            entry["severity"] = max(entry["severity"], sev)
+
+        data = sorted(grouped.values(), key=lambda e: (-e["total"], e["symbol"]))
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "hours": window,
+            "max_count": max_count,
+            "count": len(data),
+            "data": data,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/alerts/retention", dependencies=API_DEPS)
+async def get_alert_retention():
+    """Info retensi alert_history untuk panel maintenance (v2.5).
+
+    Menampilkan konfigurasi retensi, hasil prune terakhir, dan statistik
+    tabel (total baris + baris tertua). Degradasi gracefully: bila DB
+    gagal, konfigurasi tetap dikirim dengan flag db_ok=false.
+    """
+    settings = get_settings()
+    retention_days = settings.alert_history_retention_days
+    interval = settings.alert_retention_interval_minutes
+
+    db_ok = True
+    total_alerts = None
+    oldest_alert = None
+    try:
+        stats = await app_database.db.get_alert_history_stats()
+        total_alerts = stats.get("total_alerts")
+        oldest = stats.get("oldest_alert")
+        oldest_alert = oldest.isoformat() if hasattr(oldest, "isoformat") else oldest
+    except Exception as db_err:
+        logger.warning(f"Alert retention stats unavailable: {db_err}")
+        db_ok = False
+
+    return {
+        "status": "success",
+        "timestamp": _utc_now_iso(),
+        "data": {
+            "retention_days": retention_days,
+            "prune_interval_minutes": interval,
+            "auto_prune_enabled": retention_days > 0,
+            "last_prune": _last_prune,
+            "total_alerts": total_alerts,
+            "oldest_alert": oldest_alert,
+            "db_ok": db_ok,
+        },
+    }
+
+
+@router.post("/api/alerts/prune", dependencies=API_DEPS)
+async def prune_alert_history(body: Optional[PruneRequest] = None):
+    """Prune manual alert_history lebih tua dari N hari (v2.5).
+
+    - Tanpa body: pakai settings.alert_history_retention_days
+      (fallback 7 hari bila auto-prune dimatikan).
+    - Body {days}: clamp 1..365 via pydantic.
+    """
+    try:
+        settings = get_settings()
+        days = body.days if (body and body.days) else settings.alert_history_retention_days
+        if not days or days <= 0:
+            days = 7
+        days = max(1, min(int(days), 365))
+
+        deleted = await app_database.db.prune_alert_history(days)
+        record_prune_result(_utc_now_iso(), deleted)
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "deleted": deleted,
+            "retention_days_used": days,
+            "data": {"last_prune": _last_prune},
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/telegram/status", dependencies=API_DEPS)
+async def telegram_status():
+    """Status konfigurasi notifikasi Telegram (v2.5, aman untuk publik).
+
+    Token TIDAK PERNAH dikirim ke client - hanya flag configured,
+    username bot, dan chat id yang disamarkan.
+    """
+    notifier = get_notifier()
+    if notifier is not None and hasattr(notifier, "get_status"):
+        data = notifier.get_status()
+    else:
+        data = {"configured": False, "bot_username": None, "chat_id_masked": None}
+    data["db_connected"] = bool(getattr(app_database.db, "_initialized", False))
+    return {
+        "status": "success",
+        "timestamp": _utc_now_iso(),
+        "data": data,
+    }
+
+
+@router.post("/api/telegram/test", dependencies=API_DEPS)
+async def send_telegram_test():
+    """Kirim pesan test ke Telegram untuk verifikasi konfigurasi (v2.5).
+
+    Pengiriman gagal dianggap HASIL (bukan error endpoint):
+    response tetap status=success dengan flag sent=false + reason.
+    """
+    notifier = get_notifier()
+    if notifier is None:
+        return {
+            "status": "success",
+            "sent": False,
+            "reason": "not_running",
+            "message": "Telegram notifier is not running in this process.",
+        }
+
+    configured = False
+    if hasattr(notifier, "get_status"):
+        configured = bool(notifier.get_status().get("configured"))
+    else:
+        configured = bool(
+            getattr(notifier, "bot", None) and getattr(notifier, "chat_id", None)
+        )
+    if not configured:
+        return {
+            "status": "success",
+            "sent": False,
+            "reason": "not_configured",
+            "message": "Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to enable notifications.",
+        }
+
+    try:
+        ok = await notifier.send_test_message()
+        return {
+            "status": "success",
+            "sent": bool(ok),
+            "reason": None if ok else "send_failed",
+            "message": (
+                "Test message delivered - check your Telegram chat."
+                if ok else
+                "Telegram rejected the message - check bot token / chat id."
+            ),
+        }
+    except Exception as e:
+        logger.warning(f"Telegram test send failed: {e}")
+        return {"status": "success", "sent": False, "reason": "error", "message": str(e)}
 
 
 @router.post("/api/backtest/{symbol}", dependencies=API_DEPS)

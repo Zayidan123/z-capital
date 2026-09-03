@@ -119,6 +119,22 @@ class Settings(BaseSettings):
         description="Rate limit window in seconds (default 60).",
     )
 
+    # Alert history retention (v2.5): housekeeping tabel alert_history
+    alert_history_retention_days: int = Field(
+        default=7,
+        ge=0,
+        description=(
+            "Alert history rows older than this many days are pruned "
+            "periodically by the background retention loop. "
+            "Set 0 to disable automatic pruning (default 7 days)."
+        ),
+    )
+    alert_retention_interval_minutes: int = Field(
+        default=60,
+        gt=0,
+        description="How often the retention loop runs, in minutes (default 60).",
+    )
+
     def get_redis_url(self) -> str:
         """Build the Redis connection URL from settings"""
         if self.redis_url:

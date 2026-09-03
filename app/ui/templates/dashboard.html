@@ -1157,6 +1157,231 @@
         }
         .hist-empty .he-icon { font-size: 1.7rem; display: block; margin-bottom: 8px; opacity: 0.6; }
 
+        /* ===== v2.5: Alert heat map ===== */
+        .heatmap-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .heatmap-toolbar .hm-hint {
+            color: var(--muted);
+            font-size: 0.82rem;
+            flex: 1;
+            min-width: 180px;
+        }
+        .hm-summary {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .hm-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            font-size: 0.72rem;
+            color: var(--muted);
+        }
+        .hm-chip strong { color: var(--text); }
+        .heatmap-scroll { overflow-x: auto; padding-bottom: 6px; }
+        .heatmap-inner { min-width: 540px; }
+        .hm-row {
+            display: grid;
+            grid-template-columns: 96px 1fr 52px;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0;
+        }
+        .hm-row + .hm-row { border-top: 1px dashed var(--card-border); }
+        .hm-label {
+            font-family: var(--mono, monospace);
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .hm-label.sev-high { color: var(--danger); }
+        .hm-label.sev-medium { color: var(--amber); }
+        .hm-cells {
+            display: grid;
+            gap: 3px;
+        }
+        .hm-cell {
+            height: 22px;
+            border-radius: 5px;
+            background: var(--inset-bg);
+            border: 1px solid transparent;
+            transition: transform 0.12s ease, border-color 0.12s ease;
+            cursor: default;
+        }
+        .hm-cell:hover {
+            transform: scale(1.25);
+            border-color: var(--text);
+            z-index: 2;
+            position: relative;
+        }
+        .hm-total {
+            text-align: right;
+            font-family: var(--mono, monospace);
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--muted);
+        }
+        .hm-total.hot { color: var(--danger); }
+        .hm-axis {
+            display: grid;
+            gap: 3px;
+            margin: 6px 0 0 106px; /* 96px label + 10px gap */
+        }
+        .hm-axis span {
+            text-align: center;
+            font-size: 0.62rem;
+            color: var(--muted);
+            font-family: var(--mono, monospace);
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        .hm-legend {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 14px;
+            font-size: 0.7rem;
+            color: var(--muted);
+        }
+        .hm-legend .legend-bar {
+            flex: 1;
+            max-width: 220px;
+            height: 8px;
+            border-radius: 999px;
+            background: linear-gradient(90deg,
+                rgba(255, 82, 82, 0.06),
+                rgba(255, 82, 82, 0.35),
+                rgba(255, 82, 82, 0.9));
+            border: 1px solid var(--card-border);
+        }
+        .hm-empty-state {
+            padding: 24px 10px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.84rem;
+        }
+
+        /* ===== v2.5: Telegram settings panel ===== */
+        .tg-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .tg-chip {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-left: 3px solid var(--muted);
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .tg-chip:hover { transform: translateY(-2px); }
+        .tg-chip.ok { border-left-color: var(--accent-2); }
+        .tg-chip.warn { border-left-color: var(--amber); }
+        .tg-emoji { font-size: 1.2rem; flex-shrink: 0; }
+        .tg-chip-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .tg-chip-label {
+            font-size: 0.64rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+        }
+        .tg-chip-value {
+            font-size: 0.86rem;
+            font-weight: 700;
+            color: var(--text);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .tg-chip-value.dim { color: var(--muted); font-weight: 500; }
+        .tg-hint {
+            color: var(--muted);
+            font-size: 0.8rem;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+        .tg-hint code {
+            font-family: var(--mono, monospace);
+            background: var(--inset-bg);
+            padding: 1px 6px;
+            border-radius: 5px;
+            font-size: 0.74rem;
+            color: var(--accent);
+        }
+
+        /* ===== v2.5: Data retention panel ===== */
+        .ret-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .ret-box {
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            text-align: center;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .ret-box:hover { transform: translateY(-2px); border-color: var(--accent); }
+        .ret-value {
+            font-size: 1.15rem;
+            font-weight: 800;
+            color: var(--text);
+            font-family: var(--mono, monospace);
+        }
+        .ret-label {
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+        .ret-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .ret-actions .ret-oldest {
+            flex: 1;
+            min-width: 180px;
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+        .btn-prune {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            border: none;
+            color: #04121f;
+            font-weight: 700;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+        .btn-prune:hover { transform: translateY(-1px); opacity: 0.92; }
+        .btn-prune:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
         /* ===== Responsive ===== */
         @media (max-width: 640px) {
             .container { padding: 14px; }
@@ -1335,6 +1560,46 @@
             </div>
         </div>
 
+        <!-- Notification Settings (v2.5) -->
+        <div class="section-title">
+            <span>📨 Notification Settings</span>
+            <span class="toolbar">
+                <span class="last-updated" id="tg-updated"></span>
+                <button class="btn btn-ghost" id="tg-refresh-btn" title="Muat ulang status notifikasi">🔄 Refresh</button>
+            </span>
+        </div>
+        <div class="card">
+            <div class="tg-status" id="tg-status">
+                <div class="tg-chip warn" id="tg-chip-bot">
+                    <span class="tg-emoji">🤖</span>
+                    <span class="tg-chip-body">
+                        <span class="tg-chip-label">Bot</span>
+                        <span class="tg-chip-value dim" id="tg-bot-value">checking…</span>
+                    </span>
+                </div>
+                <div class="tg-chip warn" id="tg-chip-chat">
+                    <span class="tg-emoji">💬</span>
+                    <span class="tg-chip-body">
+                        <span class="tg-chip-label">Chat ID</span>
+                        <span class="tg-chip-value dim" id="tg-chat-value">checking…</span>
+                    </span>
+                </div>
+                <div class="tg-chip warn" id="tg-chip-db">
+                    <span class="tg-emoji">🗄️</span>
+                    <span class="tg-chip-body">
+                        <span class="tg-chip-label">Database</span>
+                        <span class="tg-chip-value dim" id="tg-db-value">checking…</span>
+                    </span>
+                </div>
+            </div>
+            <p class="tg-hint">
+                Konfigurasi via environment: <code>TELEGRAM_BOT_TOKEN</code> dan
+                <code>TELEGRAM_CHAT_ID</code>. Token tidak pernah dikirim ke browser —
+                hanya status dan chat id yang disamarkan.
+            </p>
+            <button class="btn" id="tg-test-btn">📨 Send Test Message</button>
+        </div>
+
         <!-- Alert History (v2.4) -->
         <div class="section-title">
             <span>🚨 Alert History</span>
@@ -1354,6 +1619,68 @@
             </div>
             <div class="history-list" id="history-list" aria-live="polite">
                 <div class="hist-empty"><span class="he-icon">🛰️</span>Loading alert history…</div>
+            </div>
+        </div>
+
+        <!-- Alert Heat Map (v2.5) -->
+        <div class="section-title">
+            <span>🔥 Alert Heat Map</span>
+            <span class="toolbar">
+                <span class="last-updated" id="heatmap-updated"></span>
+                <select class="filter-select" id="heatmap-hours" aria-label="Heat map window (hours)">
+                    <option value="12">Last 12h</option>
+                    <option value="24" selected>Last 24h</option>
+                    <option value="48">Last 48h</option>
+                    <option value="72">Last 72h</option>
+                </select>
+                <button class="btn btn-ghost" id="heatmap-refresh-btn" title="Muat ulang heat map">🔄 Refresh</button>
+            </span>
+        </div>
+        <div class="card">
+            <div class="heatmap-toolbar">
+                <p class="hm-hint">
+                    Intensitas alert per-symbol per-jam. Semakin merah sel,
+                    semakin banyak alert ter-trigger pada jam tersebut.
+                </p>
+                <span class="hm-summary" id="heatmap-summary"></span>
+            </div>
+            <div class="heatmap-scroll">
+                <div class="heatmap-inner" id="heatmap-grid">
+                    <div class="hm-empty-state"><span class="he-icon">🔥</span>Loading heat map…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Retention (v2.5) -->
+        <div class="section-title">
+            <span>🧹 Data Retention</span>
+            <span class="toolbar">
+                <span class="last-updated" id="ret-updated"></span>
+                <button class="btn btn-ghost" id="ret-refresh-btn" title="Muat ulang info retensi">🔄 Refresh</button>
+            </span>
+        </div>
+        <div class="card">
+            <div class="ret-grid">
+                <div class="ret-box">
+                    <div class="ret-value" id="ret-days">–</div>
+                    <div class="ret-label">Retention (days)</div>
+                </div>
+                <div class="ret-box">
+                    <div class="ret-value" id="ret-interval">–</div>
+                    <div class="ret-label">Prune interval</div>
+                </div>
+                <div class="ret-box">
+                    <div class="ret-value" id="ret-total">–</div>
+                    <div class="ret-label">Stored alerts</div>
+                </div>
+                <div class="ret-box">
+                    <div class="ret-value" id="ret-last">–</div>
+                    <div class="ret-label">Last prune</div>
+                </div>
+            </div>
+            <div class="ret-actions">
+                <span class="ret-oldest" id="ret-oldest">Oldest alert: –</span>
+                <button class="btn-prune" id="prune-btn" title="Hapus alert_history lebih tua dari retention days">🧹 Prune Now</button>
             </div>
         </div>
 
@@ -1378,12 +1705,13 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.4 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.5 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
                 <span><span class="kbd">R</span> refresh</span>
                 <span><span class="kbd">T</span> theme</span>
                 <span><span class="kbd">A</span> auto-refresh</span>
                 <span><span class="kbd">H</span> alert history</span>
+                <span><span class="kbd">M</span> maintenance</span>
                 <span><span class="kbd">Esc</span> close detail</span>
                 <span>click pulse card → detail</span>
             </div>
@@ -2265,6 +2593,210 @@
                 `Updated ${new Date().toLocaleTimeString()}`;
         }
 
+        // ===== v2.5: Alert heat map =====
+        let heatmapHours = 24;
+
+        function hmCellColor(count, maxCount, severity) {
+            if (!count) return null;
+            const t = Math.pow(count / Math.max(maxCount, 1), 0.6);
+            const alpha = 0.10 + 0.85 * t;
+            const rgb = severity >= 2 ? '255, 82, 82' : severity === 1 ? '255, 193, 7' : '0, 217, 255';
+            return `rgba(${rgb}, ${alpha.toFixed(3)})`;
+        }
+
+        function renderHeatmap(payload) {
+            const grid = document.getElementById('heatmap-grid');
+            const hours = payload.hours || heatmapHours;
+            const maxCount = payload.max_count || 1;
+            const rows = payload.data || [];
+
+            if (!rows.length) {
+                grid.innerHTML = `<div class="hm-empty-state"><span class="he-icon">🌙</span>No alerts in the last ${hours}h — all quiet.</div>`;
+                document.getElementById('heatmap-summary').innerHTML = '';
+                return;
+            }
+
+            const nowHour = new Date();
+            nowHour.setMinutes(0, 0, 0);
+            const nowMs = nowHour.getTime();
+            let html = '';
+
+            rows.forEach(entry => {
+                const cells = new Array(hours).fill(0);
+                (entry.cells || []).forEach(c => {
+                    const hTs = new Date(c.hour).getTime();
+                    const idx = hours - 1 - Math.floor((nowMs - hTs) / 3600000);
+                    if (idx >= 0 && idx < hours) cells[idx] = Math.max(cells[idx], c.count || 0);
+                });
+                const sevClass = entry.severity >= 2 ? 'sev-high' : (entry.severity === 1 ? 'sev-medium' : '');
+                let cellsHtml = '';
+                cells.forEach((count, idx) => {
+                    const bg = hmCellColor(count, maxCount, entry.severity);
+                    const colDate = new Date(nowMs - (hours - 1 - idx) * 3600000);
+                    const title = `${entry.symbol} • ${colDate.toLocaleTimeString([], { hour: '2-digit' })} • ${count ? count + ' alert(s)' : 'no alerts'}`;
+                    cellsHtml += `<div class="hm-cell" title="${escapeHtml(title)}" style="${bg ? 'background:' + bg + ';' : ''}"></div>`;
+                });
+                html += `
+                    <div class="hm-row">
+                        <span class="hm-label ${sevClass}" title="${escapeHtml(entry.symbol)}">${escapeHtml(entry.symbol)}</span>
+                        <div class="hm-cells" style="grid-template-columns: repeat(${hours}, 1fr);">${cellsHtml}</div>
+                        <span class="hm-total ${entry.total >= 10 ? 'hot' : ''}">${entry.total}</span>
+                    </div>`;
+            });
+
+            let axisHtml = '';
+            for (let idx = 0; idx < hours; idx++) {
+                const back = hours - 1 - idx;
+                let text = '';
+                if (idx === hours - 1) text = 'now';
+                else if (back % 6 === 0) text = `-${back}h`;
+                axisHtml += `<span>${text}</span>`;
+            }
+            const totalAll = rows.reduce((s, e) => s + (e.total || 0), 0);
+            const top = rows[0];
+            html += `
+                <div class="hm-axis" style="grid-template-columns: repeat(${hours}, 1fr);">${axisHtml}</div>
+                <div class="hm-legend"><span>quiet</span><div class="legend-bar"></div><span>intense (max ${maxCount}/hour)</span></div>`;
+            grid.innerHTML = html;
+
+            document.getElementById('heatmap-summary').innerHTML = `
+                <span class="hm-chip">Σ <strong>${totalAll}</strong> alerts</span>
+                <span class="hm-chip">Top: <strong>${escapeHtml(top.symbol)}</strong> (${top.total})</span>`;
+        }
+
+        async function loadHeatmap() {
+            const sel = document.getElementById('heatmap-hours');
+            const hours = Number(sel.value) || 24;
+            heatmapHours = hours;
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/heatmap?hours=${hours}`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Failed to load heat map');
+                renderHeatmap(Object.assign({}, data, { hours: data.hours || hours }));
+                document.getElementById('heatmap-updated').textContent =
+                    `Updated ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Heat map error:', error);
+                document.getElementById('heatmap-grid').innerHTML =
+                    `<div class="hm-empty-state" style="color: var(--danger);">⚠️ Failed to load heat map: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        // ===== v2.5: Telegram settings =====
+        async function loadTelegramStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/telegram/status`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Failed to load status');
+                const d = data.data || {};
+
+                const botOk = !!d.configured;
+                const botEl = document.getElementById('tg-chip-bot');
+                const botVal = document.getElementById('tg-bot-value');
+                botEl.classList.toggle('ok', botOk);
+                botEl.classList.toggle('warn', !botOk);
+                botVal.textContent = botOk ? (d.bot_username ? '@' + d.bot_username : 'connected') : 'not configured';
+                botVal.classList.toggle('dim', !botOk);
+
+                const chatEl = document.getElementById('tg-chip-chat');
+                const chatVal = document.getElementById('tg-chat-value');
+                chatEl.classList.toggle('ok', !!d.chat_id_masked);
+                chatEl.classList.toggle('warn', !d.chat_id_masked);
+                chatVal.textContent = d.chat_id_masked || 'not set';
+                chatVal.classList.toggle('dim', !d.chat_id_masked);
+
+                const dbEl = document.getElementById('tg-chip-db');
+                const dbVal = document.getElementById('tg-db-value');
+                dbEl.classList.toggle('ok', !!d.db_connected);
+                dbEl.classList.toggle('warn', !d.db_connected);
+                dbVal.textContent = d.db_connected ? 'connected' : 'down';
+                dbVal.classList.toggle('dim', !d.db_connected);
+
+                document.getElementById('tg-updated').textContent =
+                    `Updated ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Telegram status error:', error);
+                ['tg-bot-value', 'tg-chat-value', 'tg-db-value'].forEach(id => {
+                    document.getElementById(id).textContent = 'error';
+                });
+            }
+        }
+
+        async function sendTelegramTest() {
+            const btn = document.getElementById('tg-test-btn');
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳ Sending…';
+            try {
+                const res = await fetch(`${API_BASE}/api/telegram/test`, { method: 'POST' });
+                const data = await res.json();
+                if (data.sent) {
+                    toast(data.message || 'Test message sent', 'success');
+                    addLog('Telegram test message sent', 'success');
+                } else {
+                    toast(data.message || 'Test message not sent', 'warn');
+                    addLog(`Telegram test failed: ${data.reason || 'unknown'}`, 'error');
+                }
+            } catch (error) {
+                toast(`Telegram test error: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = original;
+                loadTelegramStatus();
+            }
+        }
+
+        // ===== v2.5: Data retention =====
+        async function loadRetention() {
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/retention`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Failed to load retention');
+                const d = data.data || {};
+
+                document.getElementById('ret-days').textContent =
+                    d.retention_days > 0 ? String(d.retention_days) : 'off';
+                document.getElementById('ret-interval').textContent = `${d.prune_interval_minutes}m`;
+                document.getElementById('ret-total').textContent =
+                    (d.total_alerts === null || d.total_alerts === undefined) ? '–' : String(d.total_alerts);
+                const last = d.last_prune;
+                document.getElementById('ret-last').textContent = last ? `${last.rows} rows` : 'never';
+                document.getElementById('ret-oldest').textContent =
+                    `Oldest alert: ${d.oldest_alert ? relativeTime(d.oldest_alert) : 'no rows stored'}`
+                    + (d.db_ok ? '' : ' (DB unreachable)');
+                document.getElementById('ret-updated').textContent =
+                    `Updated ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Retention error:', error);
+                document.getElementById('ret-oldest').textContent =
+                    `Failed to load retention info: ${error.message}`;
+            }
+        }
+
+        async function pruneNow() {
+            const btn = document.getElementById('prune-btn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/prune`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}',
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Prune failed');
+                toast(`Pruned ${data.deleted} alert row(s) (>${data.retention_days_used}d)`,
+                    data.deleted ? 'success' : 'info');
+                addLog(`Manual prune: ${data.deleted} rows deleted (retention ${data.retention_days_used}d)`);
+                loadRetention();
+                loadAlertHistory();
+                loadHeatmap();
+            } catch (error) {
+                toast(`Prune failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
         function updateDashboard(data) {
             if (!data) return;
             const system = data.system || {};
@@ -2403,6 +2935,9 @@
             fetchStats();
             fetchAnomalies();
             fetchSymbols();
+            // v2.5: panel baru ikut ter-refresh periodik (ringan: agregat SQL)
+            loadHeatmap();
+            loadRetention();
         }
 
         document.getElementById('auto-refresh-toggle').addEventListener('click', function() {
@@ -2452,6 +2987,11 @@
                 loadAlertHistory();
                 document.getElementById('history-list').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 toast('Alert history refreshed', 'info');
+            } else if (k === 'm') {
+                loadHeatmap();
+                loadRetention();
+                loadTelegramStatus();
+                toast('Maintenance panels refreshed', 'info');
             }
         });
 
@@ -2527,6 +3067,26 @@
             toast('Alert history refreshed', 'info');
         });
 
+        // ===== v2.5: Wiring heat map, Telegram & retention =====
+        document.getElementById('heatmap-hours').addEventListener('change', () => {
+            loadHeatmap();
+            addLog(`Heat map window: ${document.getElementById('heatmap-hours').value}h`);
+        });
+        document.getElementById('heatmap-refresh-btn').addEventListener('click', () => {
+            loadHeatmap();
+            toast('Heat map refreshed', 'info');
+        });
+        document.getElementById('tg-refresh-btn').addEventListener('click', () => {
+            loadTelegramStatus();
+            toast('Notification status refreshed', 'info');
+        });
+        document.getElementById('tg-test-btn').addEventListener('click', sendTelegramTest);
+        document.getElementById('ret-refresh-btn').addEventListener('click', () => {
+            loadRetention();
+            toast('Retention info refreshed', 'info');
+        });
+        document.getElementById('prune-btn').addEventListener('click', pruneNow);
+
         // ===== Init =====
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
@@ -2536,6 +3096,7 @@
             refreshAll();
             loadAlertRules();
             loadAlertHistory();
+            loadTelegramStatus(); // v2.5
             setAutoRefresh(true); // start interval + log
             addLog('Dashboard initialized');
         });

@@ -24,12 +24,31 @@ class TelegramNotifier:
         self.db = db
         self.bot: Optional[Bot] = None
         self.chat_id = self.settings.telegram_chat_id
+        self.bot_username: Optional[str] = None
         
         if not self.settings.telegram_bot_token:
             logger.warning("Telegram bot token not configured")
         
         if not self.chat_id:
             logger.warning("Telegram chat ID not configured")
+
+    def get_status(self) -> Dict[str, Any]:
+        """Status konfigurasi Telegram yang aman untuk dashboard (v2.5).
+
+        Token TIDAK PERNAH disertakan dalam output - hanya metadata:
+        - configured: bot + chat_id tersedia
+        - bot_username: username bot (diisi saat start() berhasil)
+        - chat_id_masked: chat id disamarkan (hanya 4 karakter terakhir)
+        """
+        chat_id_masked = None
+        if self.chat_id:
+            cid = str(self.chat_id)
+            chat_id_masked = ("\u2022\u2022\u2022\u2022" + cid[-4:]) if len(cid) > 4 else "\u2022\u2022\u2022\u2022"
+        return {
+            "configured": bool(self.bot and self.chat_id),
+            "bot_username": self.bot_username,
+            "chat_id_masked": chat_id_masked,
+        }
     
     async def start(self) -> None:
         """Initialize the Telegram bot"""
@@ -39,10 +58,12 @@ class TelegramNotifier:
             try:
                 # Test connection
                 me = await self.bot.get_me()
-                logger.info(f"Telegram bot initialized: @{me.username}")
+                self.bot_username = getattr(me, "username", None)
+                logger.info(f"Telegram bot initialized: @{self.bot_username}")
             except Exception as e:
                 logger.error(f"Failed to initialize Telegram bot: {e}")
                 self.bot = None
+                self.bot_username = None
         else:
             logger.warning("Telegram notifier disabled - no bot token")
     
