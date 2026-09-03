@@ -9,6 +9,7 @@ import hmac
 import io
 import json
 import asyncio
+import logging
 import time
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -28,6 +29,8 @@ from app.ui.rate_limit import rate_limit_dependency, reset_all_limiters
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 # Waktu proses dimulai - dipakai untuk metrik uptime di dashboard
 _SERVICE_START_TIME = time.monotonic()
 
@@ -38,12 +41,27 @@ _backtest_engine: Optional[BacktestEngine] = None
 
 
 def get_alert_system() -> AlertSystem:
-    """Lazy singleton AlertSystem (rules dimuat sync tanpa start())."""
+    """Lazy singleton AlertSystem (tanpa load persistensi; sync aman dipakai
+    di context non-async). Untuk memuat threshold tersimpan DB, pakai
+    `await get_alert_system_async()` di endpoint."""
     global _alert_system
     if _alert_system is None:
         _alert_system = AlertSystem(app_database.db)
         _alert_system._load_default_rules()
     return _alert_system
+
+
+async def get_alert_system_async() -> AlertSystem:
+    """Lazy singleton AlertSystem + muat threshold tersimpan DB (v2.4).
+
+    Load hanya dilakukan sekali per instance; perubahan lewat PUT tetap
+    di-persist manual sehingga tidak perlu reload tiap request.
+    """
+    alert_system = get_alert_system()
+    if not getattr(alert_system, "_persisted_loaded", False):
+        await alert_system.load_persisted_rules()
+        alert_system._persisted_loaded = True
+    return alert_system
 
 
 def get_backtest_engine() -> BacktestEngine:
@@ -317,9 +335,13 @@ async def get_symbol_detail(symbol: str, history_points: int = 120):
 
 @router.get("/api/alerts/rules", dependencies=API_DEPS)
 async def get_alert_rules():
-    """Daftar alert rules (metadata + threshold) untuk panel konfigurasi UI."""
+    """Daftar alert rules (metadata + threshold) untuk panel konfigurasi UI.
+
+    v2.4: threshold yang tersimpan di DB otomatis diterapkan saat load.
+    """
     try:
-        rules = get_alert_system().get_rules()
+        alert_system = await get_alert_system_async()
+        rules = alert_system.get_rules()
         return {
             "status": "success",
             "timestamp": _utc_now_iso(),
@@ -332,13 +354,19 @@ async def get_alert_rules():
 
 @router.put("/api/alerts/rules/{name}", dependencies=API_DEPS)
 async def update_alert_rule(name: str, body: RuleUpdateRequest):
-    """Ubah threshold satu alert rule (hanya rule editable)."""
+    """Ubah threshold satu alert rule (hanya rule editable).
+
+    v2.4: threshold juga di-persist ke tabel alert_rules sehingga
+    survive restart (best-effort; flag 'persisted' di response).
+    """
     try:
-        alert_system = get_alert_system()
+        alert_system = await get_alert_system_async()
         rule = alert_system.set_rule_threshold(name, body.threshold)
+        persisted = await alert_system.persist_rule_threshold(name, body.threshold)
         return {
             "status": "success",
             "timestamp": _utc_now_iso(),
+            "persisted": persisted,
             "data": rule,
         }
     except KeyError:
@@ -353,13 +381,25 @@ async def update_alert_rule(name: str, body: RuleUpdateRequest):
 
 @router.get("/api/alerts/history", dependencies=API_DEPS)
 async def get_alert_history(limit: int = 25):
-    """Riwayat alert yang pernah ter-trigger (in-memory, sejak proses start)."""
+    """Riwayat alert yang pernah ter-trigger.
+
+    v2.4: sumber utama kini tabel alert_history di DB (persisten, tahan
+    restart). Bila DB gagal, fallback ke riwayat in-memory sejak proses
+    start dengan flag "source" yang sesuai.
+    """
     try:
         limit = max(1, min(limit, 200))
-        history = get_alert_system().get_alert_history(limit=limit)
+        try:
+            history = await app_database.db.get_alert_history(limit=limit)
+            source = "database"
+        except Exception as db_err:
+            logger.warning(f"Alert history DB unavailable, using memory: {db_err}")
+            history = get_alert_system().get_alert_history(limit=limit)
+            source = "memory"
         return {
             "status": "success",
             "timestamp": _utc_now_iso(),
+            "source": source,
             "count": len(history),
             "data": history,
         }

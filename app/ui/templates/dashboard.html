@@ -1063,6 +1063,100 @@
             color: var(--muted);
         }
 
+        /* ===== v2.4: Alert history panel ===== */
+        .history-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .history-toolbar .history-hint {
+            color: var(--muted);
+            font-size: 0.82rem;
+            flex: 1;
+            min-width: 200px;
+        }
+        .source-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.66rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            color: var(--muted);
+        }
+        .source-badge.source-db { color: var(--accent-2); border-color: rgba(0, 255, 136, 0.25); }
+        .source-badge.source-memory { color: var(--amber); border-color: rgba(255, 193, 7, 0.3); }
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 420px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .history-item {
+            position: relative;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-left: 3px solid var(--muted);
+            border-radius: 12px;
+            padding: 11px 14px;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+        .history-item:hover { transform: translateX(3px); }
+        .history-item.prio-high { border-left-color: var(--danger); }
+        .history-item.prio-medium { border-left-color: var(--amber); }
+        .history-item.prio-low { border-left-color: var(--accent); }
+        .history-item.hist-live { animation: histIn 0.5s ease; }
+        @keyframes histIn {
+            from { opacity: 0; transform: translateY(-8px); background: rgba(0, 217, 255, 0.12); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .hist-icon {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            display: grid;
+            place-items: center;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+        }
+        .prio-high .hist-icon { color: var(--danger); border-color: rgba(255, 82, 82, 0.35); }
+        .prio-medium .hist-icon { color: var(--amber); border-color: rgba(255, 193, 7, 0.35); }
+        .prio-low .hist-icon { color: var(--accent); border-color: rgba(0, 217, 255, 0.35); }
+        .hist-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+        .hist-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .hist-symbol { font-weight: 700; color: var(--text); font-size: 0.9rem; }
+        .hist-rule { color: var(--muted); font-size: 0.74rem; font-family: var(--mono, monospace); }
+        .hist-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.72rem; color: var(--muted); }
+        .hist-meta .hm-val { color: var(--text); font-weight: 600; }
+        .hist-time { flex-shrink: 0; text-align: right; font-size: 0.7rem; color: var(--muted); line-height: 1.5; }
+        .hist-time .ht-rel { color: var(--text); font-weight: 600; }
+        .hist-empty {
+            padding: 26px 10px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.84rem;
+        }
+        .hist-empty .he-icon { font-size: 1.7rem; display: block; margin-bottom: 8px; opacity: 0.6; }
+
         /* ===== Responsive ===== */
         @media (max-width: 640px) {
             .container { padding: 14px; }
@@ -1241,6 +1335,28 @@
             </div>
         </div>
 
+        <!-- Alert History (v2.4) -->
+        <div class="section-title">
+            <span>🚨 Alert History</span>
+            <span class="toolbar">
+                <span class="last-updated" id="history-updated"></span>
+                <button class="btn btn-ghost" id="history-refresh-btn" title="Muat ulang riwayat alert">🔄 Refresh</button>
+            </span>
+        </div>
+        <div class="card">
+            <div class="history-toolbar">
+                <p class="history-hint">
+                    Riwayat alert yang ter-trigger, tersimpan persisten di database
+                    dan tetap ada meskipun aplikasi direstart. Alert baru masuk
+                    otomatis secara real-time via WebSocket.
+                </p>
+                <span class="source-badge" id="history-source" title="Sumber data riwayat">⏳ loading</span>
+            </div>
+            <div class="history-list" id="history-list" aria-live="polite">
+                <div class="hist-empty"><span class="he-icon">🛰️</span>Loading alert history…</div>
+            </div>
+        </div>
+
         <!-- Security Audit -->
         <div class="section-title"><span>🛡️ Security Audit</span></div>
         <div class="card">
@@ -1262,11 +1378,12 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.3 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.4 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
                 <span><span class="kbd">R</span> refresh</span>
                 <span><span class="kbd">T</span> theme</span>
                 <span><span class="kbd">A</span> auto-refresh</span>
+                <span><span class="kbd">H</span> alert history</span>
                 <span><span class="kbd">Esc</span> close detail</span>
                 <span>click pulse card → detail</span>
             </div>
@@ -1514,6 +1631,12 @@
                 addLog(`✅ Signal confirmed: ${escapeHtml(s.symbol)} (confidence ${Math.round((s.confidence || 0) * 100)}%)`, 'success');
                 toast(`${s.symbol} confirmed`, 'success', 'New signal');
                 fetchStats();
+            } else if (data.type === 'alert_triggered') {
+                const a = data.data || {};
+                const prio = String(a.priority || 'low').toUpperCase();
+                addLog(`🔔 Alert [${prio}]: ${escapeHtml(a.rule || '?')} on ${escapeHtml(a.symbol || '?')}`, 'error');
+                toast(`${a.symbol || '?'} — ${a.rule || 'alert'}`, prio === 'HIGH' ? 'error' : 'warn', `Alert ${prio}`);
+                prependHistoryItem(a);
             }
         }
 
@@ -2033,6 +2156,115 @@
             }
         }
 
+        // ===== v2.4: Alert history (persisten di DB + real-time via WS) =====
+        function relativeTime(isoStr) {
+            const t = new Date(isoStr).getTime();
+            if (!isFinite(t)) return '–';
+            const diff = Math.max(0, Date.now() - t) / 1000;
+            if (diff < 60) return `${Math.floor(diff)}s ago`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return `${Math.floor(diff / 86400)}d ago`;
+        }
+
+        function renderHistoryItem(alert, isLive = false) {
+            const rule = alert.rule || alert.data?.rule || 'unknown';
+            const priority = String(alert.priority || 'low').toLowerCase();
+            const symbol = alert.symbol || '—';
+            const ts = alert.timestamp || new Date().toISOString();
+            const d = alert.data || {};
+            const spike = d.volume_spike != null ? Number(d.volume_spike) : null;
+            const conf = d.confidence_score != null ? Number(d.confidence_score) : null;
+            const price = d.price != null ? Number(d.price) : null;
+            const icon = priority === 'high' ? '🔴' : priority === 'medium' ? '🟠' : '🔵';
+
+            const meta = [];
+            if (spike != null) meta.push(`<span>Spike <span class="hm-val">+${Number(spike).toFixed(0)}%</span></span>`);
+            if (conf != null) meta.push(`<span>Conf <span class="hm-val">${(conf * 100).toFixed(0)}%</span></span>`);
+            if (price != null && price > 0) meta.push(`<span>Price <span class="hm-val">$${formatPrice(price)}</span></span>`);
+            const channels = (alert.channels || []).map(c => `<span class="channel-chip">${escapeHtml(c)}</span>`).join('');
+
+            const item = document.createElement('div');
+            item.className = `history-item prio-${priority}` + (isLive ? ' hist-live' : '');
+            item.setAttribute('role', 'listitem');
+            item.innerHTML = `
+                <span class="hist-icon" aria-hidden="true">${icon}</span>
+                <div class="hist-body">
+                    <div class="hist-title">
+                        <span class="hist-symbol">${escapeHtml(symbol)}</span>
+                        <span class="priority-badge priority-${priority}">${escapeHtml(String(alert.priority || 'LOW').toUpperCase())}</span>
+                        <span class="hist-rule">${escapeHtml(rule)}</span>
+                        ${channels}
+                    </div>
+                    <div class="hist-meta">${meta.join('') || '<span>No detail data</span>'}</div>
+                </div>
+                <span class="hist-time">
+                    <span class="ht-rel">${relativeTime(ts)}</span><br>
+                    ${new Date(ts).toLocaleTimeString()}
+                </span>
+            `;
+            return item;
+        }
+
+        function setHistorySource(source) {
+            const badge = document.getElementById('history-source');
+            badge.classList.remove('source-db', 'source-memory');
+            if (source === 'database') {
+                badge.classList.add('source-db');
+                badge.textContent = '🗄️ database';
+            } else if (source === 'memory') {
+                badge.classList.add('source-memory');
+                badge.textContent = '⚡ in-memory';
+            } else {
+                badge.textContent = '⏳ loading';
+            }
+        }
+
+        async function loadAlertHistory() {
+            const list = document.getElementById('history-list');
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/history?limit=30`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Failed to load history');
+                setHistorySource(data.source);
+                const items = data.data || [];
+
+                list.innerHTML = '';
+                if (!items.length) {
+                    list.innerHTML = `
+                        <div class="hist-empty"><span class="he-icon">📭</span>
+                        No alerts triggered yet — rules are monitored in real-time.
+                        </div>`;
+                } else {
+                    items.forEach(alert => list.appendChild(renderHistoryItem(alert)));
+                }
+                document.getElementById('history-updated').textContent =
+                    `Updated ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Alert history error:', error);
+                list.innerHTML = `
+                    <div class="hist-empty" style="color: var(--danger);">
+                    ⚠️ Failed to load history: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        function prependHistoryItem(alert) {
+            const list = document.getElementById('history-list');
+            if (!list) return;
+            // Hapus empty state jika ada
+            const empty = list.querySelector('.hist-empty');
+            if (empty) empty.remove();
+            const item = renderHistoryItem(alert, true);
+            list.insertBefore(item, list.firstChild);
+            // Batasi tampilan ke 60 item agar DOM tetap ringan
+            while (list.children.length > 60) {
+                list.removeChild(list.lastChild);
+            }
+            setHistorySource('database'); // alert baru selalu di-persist dulu
+            document.getElementById('history-updated').textContent =
+                `Updated ${new Date().toLocaleTimeString()}`;
+        }
+
         function updateDashboard(data) {
             if (!data) return;
             const system = data.system || {};
@@ -2216,6 +2448,10 @@
             } else if (k === 'a') {
                 setAutoRefresh(!autoRefresh);
                 toast(`Auto-refresh ${autoRefresh ? 'enabled' : 'disabled'}`, 'info');
+            } else if (k === 'h') {
+                loadAlertHistory();
+                document.getElementById('history-list').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                toast('Alert history refreshed', 'info');
             }
         });
 
@@ -2286,6 +2522,10 @@
             loadAlertRules();
             toast('Alert rules reloaded', 'info');
         });
+        document.getElementById('history-refresh-btn').addEventListener('click', () => {
+            loadAlertHistory();
+            toast('Alert history refreshed', 'info');
+        });
 
         // ===== Init =====
         document.addEventListener('DOMContentLoaded', () => {
@@ -2295,6 +2535,7 @@
             connectWebSocket();
             refreshAll();
             loadAlertRules();
+            loadAlertHistory();
             setAutoRefresh(true); // start interval + log
             addLog('Dashboard initialized');
         });

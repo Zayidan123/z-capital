@@ -98,6 +98,29 @@ class Database:
                 )
             """)
             
+            # Create alert_rules table (v2.4: persistensi threshold rules agar
+            # perubahan lewat dashboard survive restart)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS alert_rules (
+                    name VARCHAR(100) PRIMARY KEY,
+                    threshold DOUBLE PRECISION NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Create alert_history table (v2.4: riwayat alert yang ter-trigger,
+            # tahan restart - sebelumnya hanya in-memory)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS alert_history (
+                    id SERIAL PRIMARY KEY,
+                    rule VARCHAR(100) NOT NULL,
+                    priority VARCHAR(20) NOT NULL,
+                    symbol VARCHAR(50) NOT NULL,
+                    data JSONB,
+                    timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes for better query performance
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_anomali_logs_symbol 
@@ -114,6 +137,14 @@ class Database:
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_signals_sent_timestamp 
                 ON signals_sent(timestamp)
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_alert_history_timestamp 
+                ON alert_history(timestamp)
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_alert_history_symbol 
+                ON alert_history(symbol)
             """)
             
             logger.info("Database tables created successfully")
@@ -284,6 +315,83 @@ class Database:
                 """
             )
             return [dict(row) for row in rows]
+
+    # ===== v2.4: Persistensi alert rules & history =====
+
+    async def get_alert_rule_thresholds(self) -> Dict[str, float]:
+        """Ambil seluruh threshold rule yang tersimpan di DB.
+
+        Returns:
+            Dict {rule_name: threshold}
+        """
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                "SELECT name, threshold FROM alert_rules"
+            )
+            return {row["name"]: float(row["threshold"]) for row in rows}
+
+    async def upsert_alert_rule_threshold(self, name: str, threshold: float) -> None:
+        """Simpan/update threshold satu alert rule di DB (survive restart)."""
+        async with self.get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO alert_rules (name, threshold, updated_at)
+                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                ON CONFLICT (name) DO UPDATE SET
+                    threshold = EXCLUDED.threshold,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                name, threshold,
+            )
+
+    async def log_alert(
+        self,
+        rule: str,
+        priority: str,
+        symbol: str,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        """Simpan alert yang ter-trigger ke alert_history (persisten)."""
+        import json as _json
+        async with self.get_connection() as conn:
+            result = await conn.fetchrow(
+                """
+                INSERT INTO alert_history (rule, priority, symbol, data)
+                VALUES ($1, $2, $3, $4::jsonb)
+                RETURNING id
+                """,
+                rule, priority, symbol,
+                _json.dumps(data or {}, default=str),
+            )
+            return result["id"]
+
+    async def get_alert_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Riwayat alert terbaru dari DB (terbaru dulu).
+
+        Kolom data (JSONB) dikonversi ke dict agar siap dikirim sebagai JSON.
+        """
+        import json as _json
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, rule, priority, symbol, data, timestamp
+                FROM alert_history
+                ORDER BY timestamp DESC
+                LIMIT $1
+                """,
+                max(1, min(int(limit), 500)),
+            )
+            history: List[Dict[str, Any]] = []
+            for row in rows:
+                item = dict(row)
+                raw = item.get("data")
+                if isinstance(raw, str):
+                    try:
+                        item["data"] = _json.loads(raw)
+                    except (ValueError, TypeError):
+                        item["data"] = None
+                history.append(item)
+            return history
 
     async def get_recent_signals(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent signals from the database"""

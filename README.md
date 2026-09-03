@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.3
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.4
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-137%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-158%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -73,7 +73,7 @@ z-capital/
 │   ├── notifier.py       # Telegram bot notifications
 │   ├── logging_config.py # Structured logging (JSON + console)
 │   └── main.py           # Orchestrator + FastAPI app
-├── tests/                # Test suite lengkap (68 tests, semua mock - tanpa DB/network)
+├── tests/                # Test suite lengkap (158 tests, semua mock - tanpa DB/network)
 ├── scripts/deploy.sh     # Deployment helper
 ├── Dockerfile            # Multi-stage build, non-root user, healthcheck
 ├── docker-compose.yml    # PostgreSQL + Redis (optional) + App
@@ -174,14 +174,14 @@ docker compose logs -f app
 | `/dashboard/api/symbols` | GET | Ringkasan per-symbol (jumlah anomali, harga terakhir, rata-rata spike) |
 | `/dashboard/api/sparkline/{symbol}` | GET | Riwayat harga kronologis untuk grafik sparkline (`?points=10..200`) |
 | `/dashboard/api/symbol/{symbol}` | GET | Detail lengkap satu symbol: agregat + riwayat harga + anomali (`?history_points=10..500`) |
-| `/dashboard/api/alerts/rules` | GET | Daftar alert rules (metadata + threshold) |
-| `/dashboard/api/alerts/rules/{name}` | PUT | Ubah threshold rule editable (body `{"threshold": number}`) |
-| `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger (in-memory, `?limit=1..200`) |
+| `/dashboard/api/alerts/rules` | GET | Daftar alert rules (metadata + threshold, otomatis menerapkan threshold tersimpan DB) |
+| `/dashboard/api/alerts/rules/{name}` | PUT | Ubah threshold rule editable + persist ke DB (body `{"threshold": number}`, response flag `persisted`) |
+| `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`, `?limit=1..200`) |
 | `/dashboard/api/backtest/{symbol}` | POST | Backtest strategi volume-spike (body `{"days": 1..90, "volume_threshold": 10..10000}`) |
 | `/dashboard/api/export/signals.csv` | GET | Export sinyal ke file CSV (support `?limit=`) |
 | `/dashboard/api/security/audit` | GET | Jalankan audit keamanan (dependency scan + pentest) |
 | `/dashboard/api/signals/validate/{symbol}` | GET | Validasi sinyal multi-layer untuk symbol |
-| `/dashboard/ws/updates` | WebSocket | Update real-time (anomaly, signal, stats auto-push tiap 30s) |
+| `/dashboard/ws/updates` | WebSocket | Update real-time (anomaly, signal, **alert_triggered**, stats auto-push tiap 30s) |
 
 > 🔐 **Opsi autentikasi API**: set environment variable `DASHBOARD_API_KEY` untuk mewajibkan header `X-API-Key` pada semua endpoint `/dashboard/api/*` (cocok saat dashboard diekspos ke publik). Jika tidak di-set, semua endpoint terbuka (mode lokal). Halaman HTML & WebSocket tidak terpengaruh.
 >
@@ -196,6 +196,8 @@ docker compose logs -f app
 | `anomali_logs` | Log volume anomaly (symbol, price, spike %, volume) |
 | `smart_wallets` | Database wallet pintar (address, chain, win rate) |
 | `signals_sent` | Riwayat sinyal Telegram (status sent/failed) |
+| `alert_rules` | Threshold alert rules yang diubah via dashboard (**survive restart**, v2.4) |
+| `alert_history` | Riwayat alert ter-trigger (rule, priority, symbol, data JSONB — persisten, v2.4) |
 
 ---
 
@@ -214,7 +216,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 137 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, AlertSystem data-driven, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules, backtest, sparkline, CSV export, dan opt-in API key auth).
+**Status saat ini: 158 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history dari DB, backtest, sparkline, CSV export, opt-in API key auth, serta integrasi pipeline anomaly → alert → WebSocket).
 
 ---
 
@@ -316,6 +318,15 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
 - **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
 - **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
+
+### ✨ v2.4 — Persistensi Alert & Real-time Alert Pipeline
+- **🔌 Alert rules survive restart** — tabel `alert_rules` di PostgreSQL: threshold yang diubah via dashboard di-upsert ke DB (`PUT` response flag `persisted`) dan otomatis di-restore saat proses start ulang (`AlertSystem.load_persisted_rules`, best-effort — DB mati pun rules tetap jalan dengan default)
+- **🗄️ Alert history persisten** — tabel `alert_history` (rule, priority, symbol, data JSONB): setiap alert ter-trigger tersimpan ke DB; endpoint `/api/alerts/history` kini membaca dari DB (flag `source: database`) dengan fallback in-memory (`source: memory`) bila DB tidak tersedia
+- **🚨 Alert History panel di dashboard** — kartu alert berwarna prioritas (HIGH merah / MEDIUM amber), ikon prioritas, symbol + rule + channel chips, metrik spike/confidence/price, waktu relatif ("18m ago") + absolut, badge sumber data (database/in-memory), tombol Refresh + shortcut `H`, animasi entrance untuk item baru, max-height scroll
+- **⚡ Pipeline alert kini hidup** — fix gap integrasi: `AlertSystem.check_alerts()` **tidak pernah dipanggil** di pipeline utama (rules ada tapi tak pernah dievaluasi). Kini `_handle_anomaly` mengevaluasi rules terhadap setiap hasil analisis → trigger di-persist ke DB → di-broadcast real-time
+- **📡 WebSocket `alert_triggered`** — alert yang ter-trigger langsung didorong ke semua dashboard client: toast prioritas HIGH (error) / lainnya (warn), log entry, dan item history baru masuk otomatis dengan animasi (tanpa refresh)
+- **⌨️ Shortcut `H`** — refresh Alert History dari keyboard (hint di footer v2.4)
+- **+21 test baru** — persistensi rules/history DB (upsert, JSONB parse, clamp), AlertSystem (load/persist/callback, best-effort DB failure), endpoint history (database + fallback memory), integrasi pipeline (anomaly → alert → broadcast WS, pipeline tetap jalan saat alert engine error) → total **158 tests**
 
 ### ✨ v2.3 — Symbol Detail Modal, Backtest Engine & Alert Rules
 - **🔍 Symbol detail modal** — klik Market Pulse card (atau tekan Enter) membuka modal detail: chart harga besar (SVG 700×240) dengan grid, label axis harga & waktu, marker high/low, gradient area, crosshair + tooltip hover, chips Open/Close/High/Low/Change, dan tabel 20 anomali terakhir symbol tersebut (endpoint `/api/symbol/{symbol}` baru, 404 untuk symbol tak dikenal)

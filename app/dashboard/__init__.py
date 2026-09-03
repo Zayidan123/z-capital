@@ -4,7 +4,7 @@ Real-time dashboard, alerting system, and backtesting engine
 """
 import asyncio
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable, Awaitable
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
@@ -142,19 +142,66 @@ class AlertSystem:
     """
     Advanced alerting system with multiple notification channels
     """
-    
+
+    # Tipe callback: async def cb(alert: Dict) -> None; dipanggil untuk
+    # tiap alert yang ter-trigger (mis. broadcast WebSocket ke dashboard).
+    AlertCallback = Callable[[Dict[str, Any]], Awaitable[None]]
+
     def __init__(self, db: Database):
         self.settings = get_settings()
         self.db = db
         self.alert_rules: List[Dict[str, Any]] = []
         self.alert_history: List[Dict[str, Any]] = []
         self.rate_limits: Dict[str, datetime] = {}
-    
+        self.on_alert: Optional[AlertSystem.AlertCallback] = None
+
+    def set_alert_callback(self, callback: AlertCallback) -> None:
+        """Pasang async callback yang dipanggil tiap alert ter-trigger.
+
+        Dipakai main.py untuk mem-broadcast alert ke dashboard secara
+        real-time via WebSocket.
+        """
+        self.on_alert = callback
+
     async def start(self) -> None:
-        """Initialize the alert system"""
-        # Load default alert rules
+        """Initialize the alert system (muat default + persistensi DB)."""
         self._load_default_rules()
+        await self.load_persisted_rules()
         logger.info("Alert System initialized")
+
+    async def load_persisted_rules(self) -> bool:
+        """Terapkan threshold tersimpan di DB ke rules editable.
+
+        v2.4: perubahan threshold lewat dashboard kini survive restart.
+        Best-effort: bila DB gagal/tabel belum ada, rules tetap jalan
+        dengan default dan method mengembalikan False.
+        """
+        try:
+            persisted = await self.db.get_alert_rule_thresholds()
+        except Exception as e:
+            logger.warning(f"Could not load persisted alert rules: {e}")
+            return False
+
+        applied = 0
+        for rule in self.alert_rules:
+            if rule.get("editable") and rule["name"] in persisted:
+                try:
+                    rule["threshold"] = float(persisted[rule["name"]])
+                    applied += 1
+                except (TypeError, ValueError):
+                    continue
+        if applied:
+            logger.info(f"Restored {applied} persisted alert rule threshold(s)")
+        return True
+
+    async def persist_rule_threshold(self, name: str, value: float) -> bool:
+        """Simpan threshold rule ke DB agar survive restart (best-effort)."""
+        try:
+            await self.db.upsert_alert_rule_threshold(name, float(value))
+            return True
+        except Exception as e:
+            logger.warning(f"Could not persist alert rule '{name}': {e}")
+            return False
     
     async def stop(self) -> None:
         """Cleanup resources"""
@@ -313,7 +360,26 @@ class AlertSystem:
                     triggered_alerts.append(alert)
                     self.rate_limits[rate_key] = now
                     self.alert_history.append(alert)
-                    
+
+                    # v2.4: simpan ke DB (persisten, tahan restart) dan
+                    # panggil callback (WS broadcast) - keduanya best-effort
+                    # agar kegagalan notifikasi tidak memutus evaluasi rule.
+                    try:
+                        await self.db.log_alert(
+                            rule=rule_name,
+                            priority=rule['priority'],
+                            symbol=symbol,
+                            data=analysis_result,
+                        )
+                    except Exception as db_err:
+                        logger.warning(f"Could not persist alert to DB: {db_err}")
+
+                    if self.on_alert is not None:
+                        try:
+                            await self.on_alert(alert)
+                        except Exception as cb_err:
+                            logger.warning(f"Alert callback failed: {cb_err}")
+
                     logger.info(f"Alert triggered: {rule_name} for {symbol}")
                     
             except Exception as e:

@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 import time
-from typing import Optional, Set
+from typing import Dict, Optional, Set
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -20,7 +20,7 @@ from app.database import Database, get_database
 from app.streamer import BinanceStreamer
 from app.analyzer import DeepDiveAnalyzer
 from app.notifier import TelegramNotifier
-from app.ui.routes import router as ui_router, broadcast_update
+from app.ui.routes import router as ui_router, broadcast_update, get_alert_system
 
 # Configure logging
 logging.basicConfig(
@@ -108,6 +108,12 @@ class CryptoOracleApp:
         )
         logger.info("Streamer initialized")
 
+        # v2.4: sambungkan AlertSystem ke pipeline (evaluasi rules + persist
+        # history ke DB) dan pasang callback broadcast WS untuk dashboard.
+        alert_system = get_alert_system()
+        alert_system.set_alert_callback(self._broadcast_alert)
+        logger.info("Alert system wired to anomaly pipeline")
+
         logger.info("All components initialized successfully")
 
     def _spawn_background_task(self, coro) -> asyncio.Task:
@@ -120,6 +126,26 @@ class CryptoOracleApp:
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
         return task
+
+    async def _broadcast_alert(self, alert: Dict) -> None:
+        """Callback AlertSystem: dorong alert ter-trigger ke dashboard via WS."""
+        try:
+            await broadcast_update({
+                "type": "alert_triggered",
+                "timestamp": _utc_now().isoformat(),
+                "data": {
+                    "rule": alert.get("rule"),
+                    "priority": alert.get("priority"),
+                    "symbol": alert.get("symbol"),
+                    "channels": alert.get("channels", []),
+                    "timestamp": alert.get("timestamp"),
+                    "volume_spike": alert.get("data", {}).get("volume_spike"),
+                    "confidence_score": alert.get("data", {}).get("confidence_score"),
+                    "price": alert.get("data", {}).get("price"),
+                },
+            })
+        except Exception as e:
+            logger.warning(f"Failed to broadcast alert: {e}")
 
     async def _handle_anomaly(self, anomaly_data: dict) -> None:
         """
@@ -143,6 +169,19 @@ class CryptoOracleApp:
             # Add price to analysis result
             analysis_result['price'] = anomaly_data.get('price', 0)
             analysis_result['volume_spike'] = anomaly_data.get('volume_spike', 0)
+
+            # v2.4: evaluasi alert rules terhadap hasil analisis. Trigger
+            # di-persist ke DB + di-broadcast ke dashboard via callback.
+            try:
+                alert_system = get_alert_system()
+                triggered = await alert_system.check_alerts(analysis_result)
+                if triggered:
+                    logger.info(
+                        f"{len(triggered)} alert(s) triggered for {symbol}: "
+                        f"{[a['rule'] for a in triggered]}"
+                    )
+            except Exception as alert_err:
+                logger.warning(f"Alert evaluation failed: {alert_err}")
 
             # Send notification if signal is confirmed
             if analysis_result.get('confirmed', False):
