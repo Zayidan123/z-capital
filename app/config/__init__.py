@@ -104,6 +104,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Dashboard Rate Limiting (per-IP, sliding window, in-memory)
+    dashboard_rate_limit: int = Field(
+        default=120,
+        ge=0,
+        description=(
+            "Max API requests per IP per window for /dashboard/api/* endpoints. "
+            "Set 0 to disable rate limiting (default 120/min)."
+        ),
+    )
+    dashboard_rate_limit_window: int = Field(
+        default=60,
+        gt=0,
+        description="Rate limit window in seconds (default 60).",
+    )
+
     def get_redis_url(self) -> str:
         """Build the Redis connection URL from settings"""
         if self.redis_url:

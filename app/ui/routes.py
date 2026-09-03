@@ -17,16 +17,62 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
 from app import database as app_database
 from app.config import get_settings
 from app.database import get_recent_signals, get_system_stats
+from app.dashboard import AlertSystem, BacktestEngine
 from app.security.hardening import signal_validator, penetration_tester, dependency_auditor
+from app.ui.rate_limit import rate_limit_dependency, reset_all_limiters
 
 router = APIRouter()
 
 # Waktu proses dimulai - dipakai untuk metrik uptime di dashboard
 _SERVICE_START_TIME = time.monotonic()
+
+# Lazy singleton engines (dibuat saat pertama kali dipakai; reset_engines()
+# dipakai test suite agar tiap test mulai dari state bersih)
+_alert_system: Optional[AlertSystem] = None
+_backtest_engine: Optional[BacktestEngine] = None
+
+
+def get_alert_system() -> AlertSystem:
+    """Lazy singleton AlertSystem (rules dimuat sync tanpa start())."""
+    global _alert_system
+    if _alert_system is None:
+        _alert_system = AlertSystem(app_database.db)
+        _alert_system._load_default_rules()
+    return _alert_system
+
+
+def get_backtest_engine() -> BacktestEngine:
+    """Lazy singleton BacktestEngine."""
+    global _backtest_engine
+    if _backtest_engine is None:
+        _backtest_engine = BacktestEngine(app_database.db)
+    return _backtest_engine
+
+
+def reset_engines() -> None:
+    """Reset singleton engines (untuk testing)."""
+    global _alert_system, _backtest_engine
+    _alert_system = None
+    _backtest_engine = None
+
+
+class RuleUpdateRequest(BaseModel):
+    """Body PUT /api/alerts/rules/{name}"""
+    threshold: float = Field(ge=0, description="Nilai threshold baru (>= 0)")
+
+
+class BacktestRequest(BaseModel):
+    """Body POST /api/backtest/{symbol}"""
+    days: int = Field(default=7, ge=1, le=90, description="Periode lookback (1-90 hari)")
+    volume_threshold: float = Field(
+        default=300.0, ge=10, le=10000,
+        description="Ambang volume spike %% (10-10000)",
+    )
 
 # Path template relatif terhadap file ini (bukan hard-coded /app)
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -62,6 +108,11 @@ async def require_api_key(x_api_key: Optional[str] = Header(None)) -> None:
         )
 
 
+# Dependensi standar untuk endpoint /api/*: auth opt-in + rate limit per-IP
+# (didefinisikan setelah require_api_key agar referensinya valid)
+API_DEPS = [Depends(require_api_key), Depends(rate_limit_dependency)]
+
+
 async def broadcast_update(data: Dict[str, Any]):
     """Kirim update ke semua client WebSocket yang terhubung"""
     if not active_connections:
@@ -93,7 +144,7 @@ async def dashboard_home(request: Request):
     )
 
 
-@router.get("/api/stats", dependencies=[Depends(require_api_key)])
+@router.get("/api/stats", dependencies=API_DEPS)
 async def get_dashboard_stats():
     """API endpoint untuk statistik real-time"""
     try:
@@ -121,7 +172,7 @@ async def get_dashboard_stats():
         }
 
 
-@router.get("/api/security/audit", dependencies=[Depends(require_api_key)])
+@router.get("/api/security/audit", dependencies=API_DEPS)
 async def security_audit():
     """Jalankan audit keamanan dan tampilkan hasil"""
     try:
@@ -147,7 +198,7 @@ async def security_audit():
         }
 
 
-@router.get("/api/anomalies", dependencies=[Depends(require_api_key)])
+@router.get("/api/anomalies", dependencies=API_DEPS)
 async def get_anomalies(limit: int = 50, symbol: str = None):
     """API endpoint untuk daftar anomali volume terbaru"""
     try:
@@ -167,7 +218,7 @@ async def get_anomalies(limit: int = 50, symbol: str = None):
         }
 
 
-@router.get("/api/export/signals.csv", dependencies=[Depends(require_api_key)])
+@router.get("/api/export/signals.csv", dependencies=API_DEPS)
 async def export_signals_csv(limit: int = 500):
     """Export sinyal terbaru sebagai file CSV"""
     try:
@@ -202,7 +253,7 @@ async def export_signals_csv(limit: int = 500):
         }
 
 
-@router.get("/api/symbols", dependencies=[Depends(require_api_key)])
+@router.get("/api/symbols", dependencies=API_DEPS)
 async def get_symbols():
     """Ringkasan per-symbol (jumlah anomali, harga terakhir, rata-rata spike).
 
@@ -223,7 +274,128 @@ async def get_symbols():
         }
 
 
-@router.get("/api/sparkline/{symbol}", dependencies=[Depends(require_api_key)])
+@router.get("/api/symbol/{symbol}", dependencies=API_DEPS)
+async def get_symbol_detail(symbol: str, history_points: int = 120):
+    """Detail lengkap satu symbol untuk modal dashboard:
+
+    - aggregates dari get_symbol_summary (jika ada)
+    - riwayat harga kronologis (lama -> baru) untuk chart besar
+    - anomali terakhir symbol tsb
+
+    404 bila symbol tidak dikenal (tidak ada summary/anomali/history).
+    """
+    try:
+        symbol = symbol.upper().strip()
+        history_points = max(10, min(history_points, 500))
+
+        summary_list = await app_database.db.get_symbol_summary()
+        summary = next(
+            (s for s in summary_list if str(s.get("symbol", "")).upper() == symbol),
+            None,
+        )
+        anomalies = await app_database.db.get_recent_anomalies(symbol=symbol, limit=50)
+        history = await app_database.db.get_price_history(symbol, limit=history_points)
+
+        if summary is None and not anomalies and not history:
+            raise HTTPException(status_code=404, detail=f"Unknown symbol: {symbol}")
+
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "symbol": symbol,
+            "data": {
+                "summary": summary,
+                "anomalies": anomalies,
+                "history": history,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/alerts/rules", dependencies=API_DEPS)
+async def get_alert_rules():
+    """Daftar alert rules (metadata + threshold) untuk panel konfigurasi UI."""
+    try:
+        rules = get_alert_system().get_rules()
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "count": len(rules),
+            "data": rules,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.put("/api/alerts/rules/{name}", dependencies=API_DEPS)
+async def update_alert_rule(name: str, body: RuleUpdateRequest):
+    """Ubah threshold satu alert rule (hanya rule editable)."""
+    try:
+        alert_system = get_alert_system()
+        rule = alert_system.set_rule_threshold(name, body.threshold)
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "data": rule,
+        }
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown rule: {name}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/alerts/history", dependencies=API_DEPS)
+async def get_alert_history(limit: int = 25):
+    """Riwayat alert yang pernah ter-trigger (in-memory, sejak proses start)."""
+    try:
+        limit = max(1, min(limit, 200))
+        history = get_alert_system().get_alert_history(limit=limit)
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "count": len(history),
+            "data": history,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/api/backtest/{symbol}", dependencies=API_DEPS)
+async def run_symbol_backtest(symbol: str, body: BacktestRequest):
+    """Jalankan backtest strategi volume-spike untuk satu symbol.
+
+    - days di-clamp 1..90 (via pydantic)
+    - volume_threshold di-clamp 10..10000 (via pydantic)
+    """
+    try:
+        symbol = symbol.upper().strip()
+        engine = get_backtest_engine()
+        result = await engine.run_backtest(
+            symbol=symbol,
+            days=body.days,
+            volume_threshold=body.volume_threshold,
+        )
+        if result.get("error"):
+            return {"status": "error", "message": result["error"]}
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "data": result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/sparkline/{symbol}", dependencies=API_DEPS)
 async def get_sparkline(symbol: str, points: int = 60):
     """Riwayat harga kronologis untuk satu symbol (untuk grafik sparkline).
 

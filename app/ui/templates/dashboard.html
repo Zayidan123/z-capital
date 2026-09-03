@@ -25,6 +25,7 @@
             --skeleton-a: rgba(255,255,255,0.06);
             --skeleton-b: rgba(255,255,255,0.14);
             --btn-text: #101528;
+            --bg-solid: #101627;
             --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
             --banner-bg: rgba(255, 82, 82, 0.12);
             --radius: 16px;
@@ -49,6 +50,7 @@
             --skeleton-a: rgba(20,32,55,0.07);
             --skeleton-b: rgba(20,32,55,0.16);
             --btn-text: #ffffff;
+            --bg-solid: #f4f7fd;
             --shadow: 0 12px 28px rgba(30, 45, 80, 0.14);
             --banner-bg: rgba(214, 58, 58, 0.10);
         }
@@ -765,6 +767,302 @@
             color: var(--text);
         }
 
+        /* ===== v2.3: Pulse card klikable ===== */
+        .pulse-card.clickable {
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+        .pulse-card.clickable:hover,
+        .pulse-card.clickable:focus-visible {
+            transform: translateY(-3px);
+            border-color: var(--accent);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+            outline: none;
+        }
+        .pulse-card.clickable:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        .pulse-hint {
+            font-size: 0.72rem;
+            color: var(--accent);
+            opacity: 0.85;
+            letter-spacing: 0.02em;
+        }
+
+        /* ===== v2.3: Modal detail symbol ===== */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(4, 8, 18, 0.62);
+            backdrop-filter: blur(7px);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 4vh 16px 16px;
+            overflow-y: auto;
+            opacity: 0;
+            transition: opacity 0.22s ease;
+        }
+        /* Atribut hidden HARUS menang atas display:flex, else backdrop
+           transparan tetap menutupi halaman dan mencegat semua klik */
+        .modal-backdrop[hidden] { display: none; }
+        .modal-backdrop.open { opacity: 1; }
+
+        .modal {
+            background: var(--bg-solid);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            width: min(760px, 100%);
+            max-height: calc(100vh - 8vh);
+            overflow-y: auto;
+            transform: translateY(14px) scale(0.97);
+            transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+        }
+        .modal-backdrop.open .modal { transform: translateY(0) scale(1); }
+
+        .modal-header {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 22px;
+            background: var(--bg-solid);
+            border-bottom: 1px solid var(--card-border);
+        }
+        .modal-header .modal-symbol {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: 0.03em;
+        }
+        .modal-header .modal-price {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--accent-2);
+        }
+        .modal-header .modal-sub {
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+        .modal-close {
+            margin-left: auto;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            color: var(--muted);
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+        }
+        .modal-close:hover { color: var(--danger); border-color: var(--danger); transform: rotate(90deg); }
+
+        .modal-body { padding: 20px 22px 26px; display: flex; flex-direction: column; gap: 22px; }
+        .modal-section-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text);
+            margin: 0 0 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ===== v2.3: Chart besar ===== */
+        .detail-chart-wrap {
+            position: relative;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 12px 10px 8px;
+        }
+        .detail-chart-wrap svg { display: block; width: 100%; height: 240px; }
+        .detail-chart-wrap .grid-line { stroke: var(--card-border); stroke-width: 1; }
+        .detail-chart-wrap .axis-label {
+            fill: var(--muted);
+            font-size: 10px;
+            font-family: inherit;
+        }
+        .detail-chart-wrap .chart-area { fill: url(#detailGrad); opacity: 0.55; }
+        .detail-chart-wrap .chart-line {
+            fill: none;
+            stroke: var(--accent-2);
+            stroke-width: 2.2;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+        .detail-chart-wrap .chart-dot {
+            fill: var(--accent-2);
+            stroke: var(--bg-solid);
+            stroke-width: 2;
+        }
+        .detail-chart-wrap .crosshair {
+            stroke: var(--muted);
+            stroke-width: 1;
+            stroke-dasharray: 4 4;
+        }
+        .chart-tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 8px 11px;
+            font-size: 0.78rem;
+            color: var(--text);
+            box-shadow: var(--shadow);
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.12s ease;
+            z-index: 5;
+        }
+        .chart-tooltip.show { opacity: 1; }
+        .chart-tooltip .tt-price { color: var(--accent-2); font-weight: 700; }
+        .chart-tooltip .tt-time { color: var(--muted); font-size: 0.7rem; }
+
+        .chart-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .chart-chip {
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 0.74rem;
+            color: var(--muted);
+        }
+        .chart-chip strong { color: var(--text); }
+
+        /* ===== v2.3: Panel backtest ===== */
+        .bt-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: flex-end;
+            margin-bottom: 12px;
+        }
+        .bt-field { display: flex; flex-direction: column; gap: 4px; }
+        .bt-field label {
+            font-size: 0.72rem;
+            color: var(--muted);
+            font-weight: 600;
+        }
+        .bt-field input {
+            width: 110px;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+        .bt-field input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+        .bt-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .bt-metric {
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .bt-metric .m-label {
+            font-size: 0.68rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 3px;
+        }
+        .bt-metric .m-value { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+        .m-value.pos { color: var(--accent-2); }
+        .m-value.neg { color: var(--danger); }
+
+        /* ===== v2.3: Alert rules panel ===== */
+        .rules-list { display: flex; flex-direction: column; gap: 10px; }
+        .rule-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+        .rule-info { display: flex; flex-direction: column; gap: 3px; min-width: 180px; flex: 1; }
+        .rule-name { font-weight: 700; color: var(--text); font-size: 0.88rem; }
+        .rule-desc { color: var(--muted); font-size: 0.75rem; }
+        .priority-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+        .priority-high { background: rgba(255, 82, 82, 0.14); color: var(--danger); }
+        .priority-medium { background: rgba(255, 193, 7, 0.14); color: var(--amber); }
+        .priority-low { background: rgba(0, 217, 255, 0.12); color: var(--accent); }
+        body.light .priority-high { background: rgba(214, 58, 58, 0.1); }
+        body.light .priority-medium { background: rgba(176, 123, 0, 0.12); }
+        .channel-chip {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 999px;
+            padding: 2px 9px;
+            font-size: 0.68rem;
+            color: var(--muted);
+        }
+        .rule-threshold {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .rule-threshold input {
+            width: 96px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 7px 9px;
+            font-size: 0.82rem;
+            font-family: inherit;
+        }
+        .rule-threshold input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+        .rule-threshold input:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-save-rule {
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+            border: none;
+            color: #04121f;
+            font-weight: 700;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+        .btn-save-rule:hover { transform: translateY(-1px); opacity: 0.92; }
+        .btn-save-rule:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .rule-key {
+            font-size: 0.68rem;
+            color: var(--muted);
+        }
+
         /* ===== Responsive ===== */
         @media (max-width: 640px) {
             .container { padding: 14px; }
@@ -929,6 +1227,20 @@
             </div>
         </div>
 
+        <!-- Alert Rules (v2.3) -->
+        <div class="section-title"><span>🔔 Alert Rules</span></div>
+        <div class="card">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+                <p style="color: var(--muted); font-size: 0.82rem; flex: 1; min-width: 220px;">
+                    Atur ambang pemicu notifikasi. Perubahan berlaku langsung pada engine alert.
+                </p>
+                <button class="btn btn-ghost" id="rules-refresh-btn" title="Muat ulang rules">🔄 Reload</button>
+            </div>
+            <div class="rules-list" id="rules-list">
+                <p style="color: var(--muted); font-size: 0.85rem;">Loading alert rules…</p>
+            </div>
+        </div>
+
         <!-- Security Audit -->
         <div class="section-title"><span>🛡️ Security Audit</span></div>
         <div class="card">
@@ -950,13 +1262,82 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.2 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.3 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
                 <span><span class="kbd">R</span> refresh</span>
                 <span><span class="kbd">T</span> theme</span>
                 <span><span class="kbd">A</span> auto-refresh</span>
+                <span><span class="kbd">Esc</span> close detail</span>
+                <span>click pulse card → detail</span>
             </div>
         </footer>
+    </div>
+
+    <!-- Symbol Detail Modal (v2.3) -->
+    <div class="modal-backdrop" id="symbol-modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-symbol">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <span class="modal-symbol" id="modal-symbol">–</span>
+                    <div class="modal-sub" id="modal-sub">Loading…</div>
+                </div>
+                <span class="modal-price" id="modal-price"></span>
+                <button class="modal-close" id="modal-close" aria-label="Close detail modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <section>
+                    <h4 class="modal-section-title">📈 Price Chart <span class="rule-key">(hover untuk detail titik)</span></h4>
+                    <div class="detail-chart-wrap" id="detail-chart-wrap">
+                        <svg id="detail-chart" viewBox="0 0 700 240" preserveAspectRatio="none" role="img" aria-label="Detail price chart">
+                            <defs>
+                                <linearGradient id="detailGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="#00ff88" stop-opacity="0.35"/>
+                                    <stop offset="100%" stop-color="#00ff88" stop-opacity="0"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        <div class="chart-tooltip" id="chart-tooltip"></div>
+                    </div>
+                    <div class="chart-stats" id="chart-stats"></div>
+                </section>
+
+                <section>
+                    <h4 class="modal-section-title">⚡ Strategy Backtest</h4>
+                    <div class="bt-controls">
+                        <div class="bt-field">
+                            <label for="bt-days">Lookback (days)</label>
+                            <input type="number" id="bt-days" min="1" max="90" value="7" />
+                        </div>
+                        <div class="bt-field">
+                            <label for="bt-threshold">Volume spike ≥ %</label>
+                            <input type="number" id="bt-threshold" min="10" max="10000" value="300" />
+                        </div>
+                        <button class="btn" id="bt-run-btn">▶ Run Backtest</button>
+                    </div>
+                    <div id="bt-output">
+                        <p style="color: var(--muted); font-size: 0.82rem;">Simulasi strategi: entry saat anomali terdeteksi, exit pakai harga riil di akhir horizon holding.</p>
+                    </div>
+                </section>
+
+                <section>
+                    <h4 class="modal-section-title">🚨 Recent Anomalies <span id="modal-anomaly-count" style="color: var(--muted); font-weight: 400; font-size: 0.78rem;"></span></h4>
+                    <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 12px;">
+                        <table class="signals-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Volume Spike</th>
+                                    <th>Price</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modal-anomalies-body">
+                                <tr><td colspan="3" class="empty-row">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
     </div>
 
     <div class="toasts" id="toasts" aria-live="polite"></div>
@@ -1267,7 +1648,11 @@
 
             for (const s of symbols) {
                 const card = document.createElement('div');
-                card.className = 'pulse-card';
+                card.className = 'pulse-card clickable';
+                card.tabIndex = 0;
+                card.setAttribute('role', 'button');
+                card.setAttribute('aria-label', `Open ${s.symbol} detail`);
+                card.dataset.symbol = s.symbol;
                 card.innerHTML = `
                     <div class="pulse-head">
                         <span class="pulse-symbol">${escapeHtml(s.symbol)}</span>
@@ -1278,7 +1663,12 @@
                         <span class="pulse-price">${formatPrice(s.last_price)}</span>
                         <span class="pulse-meta">${s.anomaly_count} anomalies · avg spike +${Number(s.avg_spike || 0).toFixed(0)}%</span>
                     </div>
+                    <span class="pulse-hint">↗ Click for details</span>
                 `;
+                card.addEventListener('click', () => openSymbolModal(s.symbol));
+                card.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSymbolModal(s.symbol); }
+                });
                 grid.appendChild(card);
 
                 // Ambil riwayat harga lalu gambar sparkline
@@ -1316,6 +1706,331 @@
             }
             document.getElementById('pulse-updated').textContent =
                 `Updated ${new Date().toLocaleTimeString()}`;
+        }
+
+        // ===== v2.3: Modal detail symbol =====
+        let modalOpen = false;
+        let modalSymbol = null;
+        let modalHistory = [];
+
+        async function openSymbolModal(symbol) {
+            const backdrop = document.getElementById('symbol-modal');
+            modalSymbol = symbol;
+            modalOpen = true;
+
+            // Reset tampilan ke state loading
+            document.getElementById('modal-symbol').textContent = symbol;
+            document.getElementById('modal-sub').textContent = 'Loading detail…';
+            document.getElementById('modal-price').textContent = '';
+            document.getElementById('chart-stats').innerHTML = '';
+            document.getElementById('bt-output').innerHTML =
+                '<p style="color: var(--muted); font-size: 0.82rem;">Jalankan backtest untuk melihat hasil.</p>';
+            document.getElementById('modal-anomalies-body').innerHTML =
+                '<tr><td colspan="3" class="empty-row">Loading…</td></tr>';
+            document.getElementById('modal-anomaly-count').textContent = '';
+
+            backdrop.hidden = false;
+            requestAnimationFrame(() => backdrop.classList.add('open'));
+            document.body.style.overflow = 'hidden';
+            document.getElementById('modal-close').focus();
+
+            try {
+                const res = await fetch(`${API_BASE}/api/symbol/${encodeURIComponent(symbol)}?history_points=150`);
+                if (res.status === 404) {
+                    document.getElementById('modal-sub').textContent = 'No data available for this symbol';
+                    return;
+                }
+                const data = await res.json();
+                if (data.status !== 'success') {
+                    throw new Error(data.message || 'Failed to load symbol detail');
+                }
+
+                const detail = data.data || {};
+                modalHistory = detail.history || [];
+                const summary = detail.summary;
+
+                // Header
+                if (summary) {
+                    document.getElementById('modal-price').textContent = formatPrice(summary.last_price);
+                    document.getElementById('modal-sub').textContent =
+                        `${summary.anomaly_count} anomalies · avg spike +${Number(summary.avg_spike || 0).toFixed(1)}%` +
+                        (summary.last_seen ? ` · last seen ${new Date(summary.last_seen).toLocaleString()}` : '');
+                } else {
+                    document.getElementById('modal-sub').textContent = `${modalHistory.length} price points loaded`;
+                    const lastPoint = modalHistory[modalHistory.length - 1];
+                    if (lastPoint) document.getElementById('modal-price').textContent = formatPrice(lastPoint.price);
+                }
+
+                renderDetailChart(modalHistory);
+                renderModalAnomalies(detail.anomalies || []);
+                addLog(`Symbol detail loaded: ${symbol} (${modalHistory.length} points)`, 'info');
+            } catch (error) {
+                console.error(`Symbol detail error for ${symbol}:`, error);
+                document.getElementById('modal-sub').textContent = 'Failed to load detail';
+                toast(`Failed to load ${symbol} detail: ${error.message}`, 'error');
+            }
+        }
+
+        function closeSymbolModal() {
+            const backdrop = document.getElementById('symbol-modal');
+            backdrop.classList.remove('open');
+            modalOpen = false;
+            document.body.style.overflow = '';
+            setTimeout(() => { if (!modalOpen) backdrop.hidden = true; }, 240);
+        }
+
+        function renderDetailChart(history) {
+            const svg = document.getElementById('detail-chart');
+            const W = 700, H = 240, PAD_L = 54, PAD_R = 14, PAD_T = 14, PAD_B = 26;
+            const innerW = W - PAD_L - PAD_R, innerH = H - PAD_T - PAD_B;
+
+            // Bersihkan isi lama (kecuali <defs>)
+            [...svg.children].forEach(el => { if (el.tagName !== 'defs') el.remove(); });
+
+            const points = history.map(p => ({ price: Number(p.price), ts: p.timestamp }))
+                                  .filter(p => isFinite(p.price));
+            if (points.length < 2) {
+                svg.innerHTML += `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" class="axis-label">Not enough data points</text>`;
+                return;
+            }
+            const prices = points.map(p => p.price);
+            const min = Math.min(...prices), max = Math.max(...prices);
+            const range = (max - min) || 1;
+            const xAt = i => PAD_L + (i / (points.length - 1)) * innerW;
+            const yAt = p => PAD_T + (1 - (p - min) / range) * innerH;
+
+            let out = '';
+            // Grid horizontal + label harga (5 garis)
+            for (let g = 0; g <= 4; g++) {
+                const val = min + (range * g) / 4;
+                const y = yAt(val);
+                out += `<line class="grid-line" x1="${PAD_L}" y1="${y.toFixed(1)}" x2="${W - PAD_R}" y2="${y.toFixed(1)}"></line>`;
+                out += `<text class="axis-label" x="${PAD_L - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end">${formatPrice(val)}</text>`;
+            }
+            // Label waktu (awal / tengah / akhir)
+            const t0 = points[0].ts, tMid = points[Math.floor(points.length / 2)].ts, tN = points[points.length - 1].ts;
+            const fmtT = ts => ts ? new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+            out += `<text class="axis-label" x="${PAD_L}" y="${H - 8}">${fmtT(t0)}</text>`;
+            out += `<text class="axis-label" x="${W / 2}" y="${H - 8}" text-anchor="middle">${fmtT(tMid)}</text>`;
+            out += `<text class="axis-label" x="${W - PAD_R}" y="${H - 8}" text-anchor="end">${fmtT(tN)}</text>`;
+
+            // Area + garis harga
+            const coords = points.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.price).toFixed(1)}`);
+            const line = coords.join(' ');
+            const area = `M${PAD_L},${(H - PAD_B)} L` + coords.join(' L') + ` L${(W - PAD_R)},${(H - PAD_B)} Z`;
+            out += `<path class="chart-area" d="${area}"></path>`;
+            out += `<polyline class="chart-line" points="${line}"></polyline>`;
+
+            // Marker min & max
+            const minIdx = prices.indexOf(min), maxIdx = prices.indexOf(max);
+            out += `<circle class="chart-dot" cx="${xAt(maxIdx)}" cy="${yAt(max)}" r="4"></circle>`;
+            out += `<circle class="chart-dot" cx="${xAt(minIdx)}" cy="${yAt(min)}" r="4"></circle>`;
+            svg.innerHTML += out;
+
+            // Chips ringkasan
+            const first = prices[0], last = prices[prices.length - 1];
+            const change = ((last - first) / (first || 1)) * 100;
+            document.getElementById('chart-stats').innerHTML = `
+                <span class="chart-chip">Open <strong>${formatPrice(first)}</strong></span>
+                <span class="chart-chip">Close <strong>${formatPrice(last)}</strong></span>
+                <span class="chart-chip">High <strong>${formatPrice(max)}</strong></span>
+                <span class="chart-chip">Low <strong>${formatPrice(min)}</strong></span>
+                <span class="chart-chip">Change <strong style="color: ${change >= 0 ? 'var(--accent-2)' : 'var(--danger)'}">${change >= 0 ? '+' : ''}${change.toFixed(2)}%</strong></span>
+            `;
+
+            // Interaksi hover: crosshair + tooltip titik terdekat
+            const wrap = document.getElementById('detail-chart-wrap');
+            const tooltip = document.getElementById('chart-tooltip');
+            svg.onmousemove = null; svg.onmouseleave = null;
+            svg.onmousemove = (ev) => {
+                const rect = svg.getBoundingClientRect();
+                const xRatio = (ev.clientX - rect.left) / rect.width;
+                const xSvg = xRatio * W;
+                if (xSvg < PAD_L || xSvg > W - PAD_R) { tooltip.classList.remove('show'); return; }
+                const idx = Math.round(((xSvg - PAD_L) / innerW) * (points.length - 1));
+                const p = points[Math.max(0, Math.min(points.length - 1, idx))];
+                const cx = xAt(idx), cy = yAt(p.price);
+                let cross = svg.querySelector('.crosshair');
+                if (!cross) {
+                    cross = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    cross.setAttribute('class', 'crosshair');
+                    svg.appendChild(cross);
+                }
+                cross.setAttribute('x1', cx); cross.setAttribute('x2', cx);
+                cross.setAttribute('y1', PAD_T); cross.setAttribute('y2', H - PAD_B);
+
+                tooltip.innerHTML = `<div class="tt-price">${formatPrice(p.price)}</div><div class="tt-time">${p.ts ? new Date(p.ts).toLocaleString() : '-'}</div>`;
+                const wrapRect = wrap.getBoundingClientRect();
+                const ttw = tooltip.offsetWidth;
+                let left = (cx / W) * wrapRect.width + 12;
+                if (left + ttw > wrapRect.width - 8) left = (cx / W) * wrapRect.width - ttw - 12;
+                tooltip.style.left = `${Math.max(4, left)}px`;
+                tooltip.style.top = `${Math.max(4, (cy / H) * rect.height - 10)}px`;
+                tooltip.classList.add('show');
+            };
+            svg.onmouseleave = () => tooltip.classList.remove('show');
+        }
+
+        function renderModalAnomalies(anomalies) {
+            const tbody = document.getElementById('modal-anomalies-body');
+            document.getElementById('modal-anomaly-count').textContent =
+                anomalies.length ? `(${anomalies.length})` : '';
+            if (!anomalies.length) {
+                tbody.innerHTML = '<tr><td colspan="3" class="empty-row">No anomalies recorded</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            anomalies.slice(0, 20).forEach(a => {
+                const spike = Number(a.volume_spike || 0);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${a.timestamp ? new Date(a.timestamp).toLocaleString() : '-'}</td>
+                    <td><span class="pulse-trend ${spike >= 0 ? 'up' : 'down'}">${spike >= 0 ? '+' : ''}${spike.toFixed(1)}%</span></td>
+                    <td>${formatPrice(a.price)}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // ===== v2.3: Backtest =====
+        async function runBacktest() {
+            if (!modalSymbol) return;
+            const btn = document.getElementById('bt-run-btn');
+            const output = document.getElementById('bt-output');
+            const days = Math.max(1, Math.min(90, parseInt(document.getElementById('bt-days').value, 10) || 7));
+            const threshold = Math.max(10, Math.min(10000, parseFloat(document.getElementById('bt-threshold').value) || 300));
+
+            btn.disabled = true;
+            output.innerHTML = '<p style="color: var(--muted); font-size: 0.82rem;">⏳ Running backtest…</p>';
+
+            try {
+                const res = await fetch(`${API_BASE}/api/backtest/${encodeURIComponent(modalSymbol)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days, volume_threshold: threshold }),
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Backtest failed');
+                const r = data.data;
+                const perf = r.performance || {};
+                const trades = r.hypothetical_trades || [];
+
+                const fmtPct = (v, digits = 2) =>
+                    `<span class="m-value ${(v || 0) >= 0 ? 'pos' : 'neg'}">${(v || 0) >= 0 ? '+' : ''}${Number(v || 0).toFixed(digits)}%</span>`;
+
+                let html = `
+                    <div class="bt-metrics">
+                        <div class="bt-metric"><div class="m-label">Signals</div><span class="m-value">${r.total_signals ?? 0}</span></div>
+                        <div class="bt-metric"><div class="m-label">Win Rate</div><span class="m-value">${((perf.win_rate || 0) * 100).toFixed(1)}%</span></div>
+                        <div class="bt-metric"><div class="m-label">Total Return</div>${fmtPct(perf.total_return)}</div>
+                        <div class="bt-metric"><div class="m-label">Avg Trade</div>${fmtPct(perf.avg_trade_return)}</div>
+                        <div class="bt-metric"><div class="m-label">Sharpe</div><span class="m-value">${(perf.sharpe_ratio || 0).toFixed(2)}</span></div>
+                        <div class="bt-metric"><div class="m-label">Max DD</div><span class="m-value neg">-${Number(perf.max_drawdown || 0).toFixed(2)}%</span></div>
+                    </div>`;
+                if (trades.length) {
+                    html += `<table class="signals-table" style="margin-top: 12px;">
+                        <thead><tr><th>Entry Time</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Spike</th></tr></thead><tbody>`;
+                    trades.slice(0, 8).forEach(t => {
+                        const pnl = Number(t.pnl_percent || 0);
+                        html += `<tr>
+                            <td>${t.entry_time ? new Date(t.entry_time).toLocaleString() : '-'}</td>
+                            <td>${formatPrice(t.entry_price)}</td>
+                            <td>${formatPrice(t.exit_price)}</td>
+                            <td><span class="m-value ${pnl >= 0 ? 'pos' : 'neg'}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</span></td>
+                            <td>+${Number(t.volume_spike || 0).toFixed(0)}%</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                    if (trades.length > 8) html += `<p style="color: var(--muted); font-size: 0.75rem; margin-top: 6px;">…and ${trades.length - 8} more trades</p>`;
+                } else {
+                    html += '<p style="color: var(--muted); font-size: 0.8rem; margin-top: 10px;">Tidak ada trade yang bisa dievaluasi pada periode ini (butuh anomali + data harga setelahnya).</p>';
+                }
+                output.innerHTML = html;
+                toast(`Backtest ${modalSymbol}: ${r.total_signals ?? 0} signals, win rate ${((perf.win_rate || 0) * 100).toFixed(0)}%`, 'success');
+                addLog(`Backtest completed for ${modalSymbol} (${days}d, ≥${threshold}% spike)`, 'info');
+            } catch (error) {
+                console.error('Backtest error:', error);
+                output.innerHTML = `<p style="color: var(--danger); font-size: 0.82rem;">Backtest failed: ${escapeHtml(error.message)}</p>`;
+                toast('Backtest failed', 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // ===== v2.3: Alert rules =====
+        async function loadAlertRules() {
+            const list = document.getElementById('rules-list');
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/rules`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Failed to load rules');
+                const rules = data.data || [];
+
+                if (!rules.length) {
+                    list.innerHTML = '<p style="color: var(--muted); font-size: 0.85rem;">No alert rules configured.</p>';
+                    return;
+                }
+
+                list.innerHTML = '';
+                rules.forEach(rule => {
+                    const row = document.createElement('div');
+                    row.className = 'rule-row';
+                    const priorityClass = `priority-${String(rule.priority || 'low').toLowerCase()}`;
+                    const channels = (rule.channels || []).map(c => `<span class="channel-chip">${escapeHtml(c)}</span>`).join('');
+                    const thresholdInput = rule.editable
+                        ? `<input type="number" min="0" step="any" value="${rule.threshold ?? ''}" data-rule="${escapeHtml(rule.name)}" aria-label="Threshold for ${escapeHtml(rule.name)}" />
+                           <button class="btn-save-rule" data-save="${escapeHtml(rule.name)}">Save</button>`
+                        : `<span class="rule-key">fixed</span>`;
+                    const thresholdLabel = rule.threshold_key
+                        ? `<span class="rule-key">${escapeHtml(rule.threshold_key)} &gt; threshold</span>` : '';
+
+                    row.innerHTML = `
+                        <div class="rule-info">
+                            <span><span class="rule-name">${escapeHtml(rule.name)}</span>
+                            <span class="priority-badge ${priorityClass}">${escapeHtml(rule.priority)}</span></span>
+                            <span class="rule-desc">${escapeHtml(rule.description || '')}</span>
+                            <span>${channels}</span>
+                        </div>
+                        <div class="rule-threshold">${thresholdLabel}${thresholdInput}</div>
+                    `;
+                    list.appendChild(row);
+                });
+
+                // Wire tombol save
+                list.querySelectorAll('[data-save]').forEach(btn => {
+                    btn.addEventListener('click', () => saveRuleThreshold(btn.dataset.save));
+                });
+            } catch (error) {
+                console.error('Alert rules error:', error);
+                list.innerHTML = `<p style="color: var(--danger); font-size: 0.85rem;">Failed to load rules: ${escapeHtml(error.message)}</p>`;
+            }
+        }
+
+        async function saveRuleThreshold(ruleName) {
+            const input = document.querySelector(`input[data-rule="${ruleName}"]`);
+            if (!input) return;
+            const value = parseFloat(input.value);
+            if (!isFinite(value) || value < 0) {
+                toast('Threshold must be a number ≥ 0', 'warn');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/rules/${encodeURIComponent(ruleName)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ threshold: value }),
+                });
+                const data = await res.json();
+                if (res.status === 404 || res.status === 400) {
+                    throw new Error(data.detail || 'Update rejected');
+                }
+                if (data.status !== 'success') throw new Error(data.message || 'Update failed');
+                toast(`Rule "${ruleName}" updated → threshold ${value}`, 'success');
+                addLog(`Alert rule updated: ${ruleName} = ${value}`, 'success');
+            } catch (error) {
+                console.error('Rule update error:', error);
+                toast(`Failed to update rule: ${error.message}`, 'error');
+            }
         }
 
         function updateDashboard(data) {
@@ -1484,6 +2199,12 @@
 
         // ===== Keyboard shortcuts =====
         document.addEventListener('keydown', (e) => {
+            // Escape menutup modal terlebih dahulu (jika terbuka)
+            if (e.key === 'Escape' && modalOpen) {
+                e.preventDefault();
+                closeSymbolModal();
+                return;
+            }
             if (e.metaKey || e.ctrlKey || e.altKey) return;
             if (e.target.matches('input, select, textarea')) return;
             const k = e.key.toLowerCase();
@@ -1554,6 +2275,18 @@
             toast('Preparing CSV download…', 'info');
         });
 
+        // ===== v2.3: Wiring modal, rules & backtest =====
+        document.getElementById('modal-close').addEventListener('click', closeSymbolModal);
+        document.getElementById('symbol-modal').addEventListener('click', (e) => {
+            // Klik area gelap di luar modal menutup
+            if (e.target === e.currentTarget) closeSymbolModal();
+        });
+        document.getElementById('bt-run-btn').addEventListener('click', runBacktest);
+        document.getElementById('rules-refresh-btn').addEventListener('click', () => {
+            loadAlertRules();
+            toast('Alert rules reloaded', 'info');
+        });
+
         // ===== Init =====
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
@@ -1561,6 +2294,7 @@
             wireSorting('anomalies-table', renderAnomalies);
             connectWebSocket();
             refreshAll();
+            loadAlertRules();
             setAutoRefresh(true); // start interval + log
             addLog('Dashboard initialized');
         });

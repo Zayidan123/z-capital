@@ -161,33 +161,120 @@ class AlertSystem:
         logger.info("Alert System stopped")
     
     def _load_default_rules(self) -> None:
-        """Load default alert rules"""
+        """Load default alert rules.
+
+        Rules bersifat data-driven agar bisa dibaca/diubah lewat API
+        dashboard (GET/PUT /api/alerts/rules):
+        - Rule dengan 'threshold_key' + 'threshold' -> kondisi numerik
+          (x[threshold_key] > threshold) dan threshold-nya editable.
+        - Rule dengan 'condition' lambda -> kondisi kustom non-editable.
+        """
         self.alert_rules = [
             {
                 'name': 'extreme_volume_spike',
-                'condition': lambda x: x.get('volume_spike', 0) > 500,
+                'description': 'Volume spike melebihi batas persentase',
+                'threshold_key': 'volume_spike',
+                'threshold': 500.0,
                 'priority': 'HIGH',
-                'channels': ['telegram', 'log']
+                'channels': ['telegram', 'log'],
+                'editable': True,
             },
             {
                 'name': 'smart_money_detected',
+                'description': 'Smart money wallet terdeteksi pada token',
                 'condition': lambda x: x.get('smart_money_detected', False),
                 'priority': 'HIGH',
-                'channels': ['telegram', 'log']
+                'channels': ['telegram', 'log'],
+                'editable': False,
             },
             {
                 'name': 'positive_news_sentiment',
+                'description': 'Sentimen berita positif',
                 'condition': lambda x: x.get('news_sentiment') == 'positive',
                 'priority': 'MEDIUM',
-                'channels': ['telegram']
+                'channels': ['telegram'],
+                'editable': False,
             },
             {
                 'name': 'confirmed_signal',
-                'condition': lambda x: x.get('confirmed', False) and x.get('confidence_score', 0) > 0.7,
+                'description': 'Sinyal terkonfirmasi dengan confidence di atas batas',
+                'threshold_key': 'confidence_score',
+                'threshold': 0.7,
+                'requires': ['confirmed'],
                 'priority': 'HIGH',
-                'channels': ['telegram', 'log']
-            }
+                'channels': ['telegram', 'log'],
+                'editable': True,
+            },
         ]
+
+    def _rule_matches(self, rule: Dict[str, Any], data: Dict[str, Any]) -> bool:
+        """Evaluasi satu rule terhadap data analisis.
+
+        - threshold_key -> bandingkan nilai numerik dengan threshold ('>').
+        - Tanpa threshold_key -> pakai lambda 'condition'.
+        - 'requires' -> field tambahan yang HARUS truthy (mis. confirmed).
+        """
+        threshold_key = rule.get('threshold_key')
+        if threshold_key:
+            threshold = float(rule.get('threshold', 0) or 0)
+            try:
+                value = float(data.get(threshold_key, 0) or 0)
+            except (TypeError, ValueError):
+                return False
+            matched = value > threshold
+        else:
+            condition = rule.get('condition')
+            matched = bool(condition(data)) if condition else False
+
+        if not matched:
+            return False
+        for required in rule.get('requires', []):
+            if not data.get(required):
+                return False
+        return True
+
+    def get_rules(self) -> List[Dict[str, Any]]:
+        """Representasi rules yang aman untuk dikirim via JSON API.
+
+        Lambda condition tidak ikut diserialisasi; yang dikirim adalah
+        metadata + threshold sehingga UI bisa menampilkannya.
+        """
+        return [
+            {
+                'name': rule['name'],
+                'description': rule.get('description', ''),
+                'priority': rule['priority'],
+                'channels': list(rule.get('channels', [])),
+                'editable': bool(rule.get('editable', False)),
+                'threshold': rule.get('threshold'),
+                'threshold_key': rule.get('threshold_key'),
+                'requires': list(rule.get('requires', [])),
+            }
+            for rule in self.alert_rules
+        ]
+
+    def set_rule_threshold(self, name: str, value: float) -> Dict[str, Any]:
+        """Ubah threshold rule yang editable.
+
+        Raises:
+            KeyError: rule tidak ditemukan.
+            ValueError: rule tidak editable.
+        """
+        for rule in self.alert_rules:
+            if rule['name'] == name:
+                if not rule.get('editable', False):
+                    raise ValueError(f"Rule '{name}' is not threshold-editable")
+                rule['threshold'] = float(value)
+                return {
+                    'name': rule['name'],
+                    'description': rule.get('description', ''),
+                    'priority': rule['priority'],
+                    'channels': list(rule.get('channels', [])),
+                    'editable': True,
+                    'threshold': rule['threshold'],
+                    'threshold_key': rule.get('threshold_key'),
+                }
+        raise KeyError(name)
     
     async def check_alerts(self, analysis_result: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -200,7 +287,7 @@ class AlertSystem:
         
         for rule in self.alert_rules:
             try:
-                if rule['condition'](analysis_result):
+                if self._rule_matches(rule, analysis_result):
                     # Check rate limiting
                     rule_name = rule['name']
                     symbol = analysis_result.get('symbol', 'UNKNOWN')
@@ -296,7 +383,11 @@ class BacktestEngine:
                 symbol=symbol,
                 limit=1000
             )
-            
+
+            # Riwayat harga kronologis (lama -> baru) untuk simulasi exit riil
+            price_history = await self.db.get_price_history(symbol, limit=1000)
+            result['data_points'] = len(price_history)
+
             # Filter by date range
             # CATATAN: asyncpg mengembalikan datetime timezone-aware untuk kolom
             # TIMESTAMPTZ. Bandingkan dengan datetime yang juga timezone-aware
@@ -307,39 +398,55 @@ class BacktestEngine:
                 ts = a.get('timestamp')
                 if not ts:
                     continue
-                if isinstance(ts, datetime):
-                    ts_dt = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
-                else:
-                    ts_dt = datetime.fromisoformat(
-                        str(ts).replace('Z', '+00:00')
-                    )
-                if ts_dt > cutoff_date:
-                    filtered_anomalies.append(a)
-            
+                ts_dt = self._to_aware_dt(ts)
+                if ts_dt and ts_dt > cutoff_date:
+                    filtered_anomalies.append((a, ts_dt))
+
             # Simulate trades on each signal
             hypothetical_pnl = []
-            
-            for anomaly in filtered_anomalies:
-                if anomaly.get('volume_spike', 0) >= volume_threshold:
-                    # Simulate entry at anomaly price
-                    entry_price = float(anomaly.get('price', 0))
-                    entry_time = anomaly.get('timestamp')
-                    
-                    # Simple strategy: hold for 1 hour, then exit
-                    # In production, this would use actual price history
-                    exit_price = entry_price * 1.05  # Assume 5% gain (placeholder)
-                    pnl_pct = ((exit_price - entry_price) / entry_price) * 100
-                    
-                    trade = {
-                        'entry_time': str(entry_time),
-                        'entry_price': entry_price,
-                        'exit_price': exit_price,
-                        'pnl_percent': pnl_pct,
-                        'volume_spike': anomaly['volume_spike']
-                    }
-                    
-                    result['hypothetical_trades'].append(trade)
-                    hypothetical_pnl.append(pnl_pct)
+
+            for anomaly, ts_dt in filtered_anomalies:
+                spike = anomaly.get('volume_spike', 0) or 0
+                try:
+                    spike = float(spike)
+                except (TypeError, ValueError):
+                    continue
+                if spike < volume_threshold:
+                    continue
+
+                # FIX bug lama: entry_price 0/None menyebabkan ZeroDivisionError
+                try:
+                    entry_price = float(anomaly.get('price', 0) or 0)
+                except (TypeError, ValueError):
+                    continue
+                if entry_price <= 0:
+                    continue
+
+                # FIX bug lama: exit price placeholder (+5% selalu) membuat
+                # win_rate selalu 100%. Sekarang pakai harga riil dari price
+                # history pada horizon entry + holding_hours.
+                exit_price = self._find_exit_price(
+                    price_history, ts_dt,
+                    horizon_minutes=int(self.settings.volume_window_minutes * 12)
+                    if self.settings.volume_window_minutes > 0 else 60,
+                )
+                if exit_price is None:
+                    # Tidak ada data harga setelah entry -> trade tidak bisa
+                    # dievaluasi, jangan dimasukkan agar metrik jujur.
+                    continue
+
+                pnl_pct = ((exit_price - entry_price) / entry_price) * 100
+
+                trade = {
+                    'entry_time': str(anomaly.get('timestamp')),
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'pnl_percent': pnl_pct,
+                    'volume_spike': spike
+                }
+
+                result['hypothetical_trades'].append(trade)
+                hypothetical_pnl.append(pnl_pct)
             
             result['total_signals'] = len(result['hypothetical_trades'])
             
@@ -382,6 +489,46 @@ class BacktestEngine:
         
         return result
     
+    @staticmethod
+    def _to_aware_dt(value: Any) -> Optional[datetime]:
+        """Konversi timestamp (datetime | str) menjadi datetime timezone-aware."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        try:
+            return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _find_exit_price(
+        price_history: List[Dict[str, Any]],
+        entry_ts: datetime,
+        horizon_minutes: int = 60,
+    ) -> Optional[float]:
+        """Cari harga exit riil: titik harga terakhir dalam horizon waktu.
+
+        Price history harus kronologis (lama -> baru). Return None bila
+        tidak ada titik harga setelah entry (data tidak cukup).
+        """
+        if entry_ts is None:
+            return None
+        horizon_end = entry_ts + timedelta(minutes=horizon_minutes)
+        exit_price: Optional[float] = None
+        for point in price_history:
+            point_ts = BacktestEngine._to_aware_dt(point.get('timestamp'))
+            if point_ts is None or point_ts <= entry_ts:
+                continue
+            if point_ts > horizon_end:
+                # Titik pertama setelah horizon = eksekusi terdekat setelah hold
+                price = point.get('price')
+                return float(price) if price is not None else exit_price
+            price = point.get('price')
+            if price is not None:
+                exit_price = float(price)
+        return exit_price
+
     def get_backtest_summary(self) -> Dict[str, Any]:
         """Get summary of all backtests run"""
         if not self.backtest_results:

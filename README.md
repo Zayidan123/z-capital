@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.2
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.3
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-103%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-137%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -173,12 +173,19 @@ docker compose logs -f app
 | `/dashboard/api/anomalies` | GET | Daftar anomali volume terbaru (support `?limit=` & `?symbol=`) |
 | `/dashboard/api/symbols` | GET | Ringkasan per-symbol (jumlah anomali, harga terakhir, rata-rata spike) |
 | `/dashboard/api/sparkline/{symbol}` | GET | Riwayat harga kronologis untuk grafik sparkline (`?points=10..200`) |
+| `/dashboard/api/symbol/{symbol}` | GET | Detail lengkap satu symbol: agregat + riwayat harga + anomali (`?history_points=10..500`) |
+| `/dashboard/api/alerts/rules` | GET | Daftar alert rules (metadata + threshold) |
+| `/dashboard/api/alerts/rules/{name}` | PUT | Ubah threshold rule editable (body `{"threshold": number}`) |
+| `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger (in-memory, `?limit=1..200`) |
+| `/dashboard/api/backtest/{symbol}` | POST | Backtest strategi volume-spike (body `{"days": 1..90, "volume_threshold": 10..10000}`) |
 | `/dashboard/api/export/signals.csv` | GET | Export sinyal ke file CSV (support `?limit=`) |
 | `/dashboard/api/security/audit` | GET | Jalankan audit keamanan (dependency scan + pentest) |
 | `/dashboard/api/signals/validate/{symbol}` | GET | Validasi sinyal multi-layer untuk symbol |
 | `/dashboard/ws/updates` | WebSocket | Update real-time (anomaly, signal, stats auto-push tiap 30s) |
 
 > 🔐 **Opsi autentikasi API**: set environment variable `DASHBOARD_API_KEY` untuk mewajibkan header `X-API-Key` pada semua endpoint `/dashboard/api/*` (cocok saat dashboard diekspos ke publik). Jika tidak di-set, semua endpoint terbuka (mode lokal). Halaman HTML & WebSocket tidak terpengaruh.
+>
+> 🚦 **Rate limiting**: semua endpoint `/dashboard/api/*` dibatasi **120 request/menit per IP** (sliding window in-memory, per-endpoint). Melebihi kuota → HTTP 429 + header `Retry-After`. Atur via `DASHBOARD_RATE_LIMIT` (0 = nonaktif) dan `DASHBOARD_RATE_LIMIT_WINDOW` (detik).
 
 ---
 
@@ -207,7 +214,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 103 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, seluruh endpoint FastAPI termasuk anomalies, symbols, sparkline, CSV export, dan opt-in API key auth).
+**Status saat ini: 137 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, AlertSystem data-driven, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules, backtest, sparkline, CSV export, dan opt-in API key auth).
 
 ---
 
@@ -309,6 +316,15 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
 - **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
 - **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
+
+### ✨ v2.3 — Symbol Detail Modal, Backtest Engine & Alert Rules
+- **🔍 Symbol detail modal** — klik Market Pulse card (atau tekan Enter) membuka modal detail: chart harga besar (SVG 700×240) dengan grid, label axis harga & waktu, marker high/low, gradient area, crosshair + tooltip hover, chips Open/Close/High/Low/Change, dan tabel 20 anomali terakhir symbol tersebut (endpoint `/api/symbol/{symbol}` baru, 404 untuk symbol tak dikenal)
+- **⚡ Strategy Backtest interaktif** — panel backtest dalam modal: pilih lookback (1–90 hari) & ambang spike (10–10000%), hasil metrik Signals / Win Rate / Total Return / Avg Trade / Sharpe / Max Drawdown + tabel trade dengan PnL per-trade (endpoint `POST /api/backtest/{symbol}`)
+- **🐛 Fix BacktestEngine** — (1) `ZeroDivisionError` saat entry price 0/None (sekarang di-skip), (2) exit price placeholder "+5% selalu" yang membuat win rate selalu 100% → kini exit dihitung dari **harga riil** price history pada horizon holding, trade tanpa data harga setelahnya tidak dievaluasi agar metrik jujur
+- **🔔 Alert Rules panel** — lihat & ubah threshold rule alert langsung dari dashboard (badge prioritas HIGH/MEDIUM, channel chips, input threshold + Save dengan toast konfirmasi). `AlertSystem` direfactor data-driven: threshold editable via `PUT /api/alerts/rules/{name}`, rule `confirmed_signal` kini benar-benar mewajibkan `confirmed=True` (+ field `requires`), lambda tidak pernah bocor ke JSON API
+- **🚦 Rate limiting per-IP** — sliding window in-memory (default 120 req/menit per endpoint, `DASHBOARD_RATE_LIMIT` / `DASHBOARD_RATE_LIMIT_WINDOW`), HTTP 429 + header `Retry-After`, anti memory-bloat (evict stale IP, cap 10k IP), hormati `X-Forwarded-For`
+- **🎨 Styling & UX** — animasi modal (fade + scale, hormati `prefers-reduced-motion`), pulse card klikable dengan hover lift & hint "Click for details", prioritas badge & channel chips, Escape menutup modal, klik backdrop menutup, focus management, layout mobile modal responsif
+- **+34 test baru** — rate limiter (unit + HTTP 429), alerts rules endpoints (404/400/422), symbol detail (uppercase, 404, error terstruktur), backtest (harga riil, horizon exit, skip price ≤ 0), AlertSystem data-driven → total **137 tests**
 
 ---
 
