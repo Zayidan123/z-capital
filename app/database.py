@@ -121,6 +121,16 @@ class Database:
                 )
             """)
 
+            # Create app_settings table (v2.6: runtime settings yang tahan
+            # restart - retention days, refresh interval, telegram config)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key VARCHAR(100) PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Create indexes for better query performance
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_anomali_logs_symbol 
@@ -365,21 +375,42 @@ class Database:
             )
             return result["id"]
 
-    async def get_alert_history(self, limit: int = 50) -> List[Dict[str, Any]]:
+    async def get_alert_history(
+        self,
+        limit: int = 50,
+        symbol: Optional[str] = None,
+        hours: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Riwayat alert terbaru dari DB (terbaru dulu).
 
         Kolom data (JSONB) dikonversi ke dict agar siap dikirim sebagai JSON.
+
+        v2.6: filter opsional symbol (exact match) dan hours (jendela waktu
+        ke belakang) untuk click-to-filter dari heat map dashboard.
         """
         import json as _json
         async with self.get_connection() as conn:
+            clauses = []
+            args: List[Any] = []
+            if symbol:
+                args.append(str(symbol))
+                clauses.append(f"symbol = ${len(args)}")
+            if hours is not None and int(hours) > 0:
+                args.append(int(hours))
+                clauses.append(
+                    f"timestamp > NOW() - make_interval(hours => ${len(args)})"
+                )
+            args.append(max(1, min(int(limit), 500)))
+            where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
             rows = await conn.fetch(
-                """
+                f"""
                 SELECT id, rule, priority, symbol, data, timestamp
                 FROM alert_history
+                {where}
                 ORDER BY timestamp DESC
-                LIMIT $1
+                LIMIT ${len(args)}
                 """,
-                max(1, min(int(limit), 500)),
+                *args,
             )
             history: List[Dict[str, Any]] = []
             for row in rows:
@@ -463,6 +494,51 @@ class Database:
                 """
             )
             return dict(row) if row else {"total_alerts": 0, "oldest_alert": None}
+
+    # ===== v2.6: Runtime settings (key-value store, tahan restart) =====
+
+    async def get_app_settings(self, keys: Optional[List[str]] = None) -> Dict[str, str]:
+        """Ambil runtime settings dari DB.
+
+        Args:
+            keys: filter opsional; None berarti ambil semua.
+
+        Returns:
+            Dict {key: value_str}. Kosong bila tabel belum ada / DB gagal
+            (dipanggil via try/except di pemanggil).
+        """
+        async with self.get_connection() as conn:
+            if keys:
+                rows = await conn.fetch(
+                    "SELECT key, value FROM app_settings WHERE key = ANY($1)",
+                    list(keys),
+                )
+            else:
+                rows = await conn.fetch("SELECT key, value FROM app_settings")
+            return {row["key"]: row["value"] for row in rows}
+
+    async def set_app_setting(self, key: str, value: str) -> None:
+        """Simpan/update satu runtime setting di DB (survive restart)."""
+        async with self.get_connection() as conn:
+            await conn.execute(
+                """
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES ($1, $2, CURRENT_TIMESTAMP)
+                ON CONFLICT (key) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                str(key), str(value),
+            )
+
+    async def delete_app_setting(self, key: str) -> bool:
+        """Hapus satu runtime setting. True bila ada baris terhapus."""
+        async with self.get_connection() as conn:
+            status = await conn.execute(
+                "DELETE FROM app_settings WHERE key = $1", str(key)
+            )
+            return isinstance(status, str) and status.startswith("DELETE") \
+                and not status.endswith(" 0")
 
     async def get_recent_signals(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent signals from the database"""

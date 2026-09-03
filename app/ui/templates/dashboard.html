@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0e17">
     <title>{{ title }}</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%80%3C/text%3E%3C/svg%3E">
+    <link rel="manifest" href="/dashboard/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
     <style>
         :root {
             --bg-1: #12121f;
@@ -1382,6 +1385,238 @@
         .btn-prune:hover { transform: translateY(-1px); opacity: 0.92; }
         .btn-prune:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
+        /* ===== v2.6: Offline banner ===== */
+        .offline-banner[hidden] { display: none; }
+        .offline-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255, 193, 7, 0.14);
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            color: var(--amber);
+            padding: 12px 18px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            font-size: 0.88rem;
+            animation: bannerIn 0.25s ease;
+        }
+
+        /* ===== v2.6: Heat map click-to-filter ===== */
+        .hm-cell.clickable { cursor: pointer; }
+        .hm-cell.selected {
+            outline: 2px solid var(--accent);
+            outline-offset: -1px;
+            border-radius: 5px;
+        }
+        .hm-label.clickable {
+            cursor: pointer;
+            text-decoration: underline dotted transparent;
+            text-underline-offset: 3px;
+            transition: text-decoration-color 0.15s ease;
+        }
+        .hm-label.clickable:hover { text-decoration-color: currentColor; }
+        .hm-hint .hm-click-hint { color: var(--accent); }
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            background: rgba(0, 217, 255, 0.12);
+            border: 1px solid rgba(0, 217, 255, 0.45);
+            color: var(--accent);
+            font-size: 0.74rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.15s ease, background 0.15s ease;
+        }
+        .filter-chip:hover { transform: translateY(-1px); background: rgba(0, 217, 255, 0.2); }
+        .filter-chip .chip-x {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: rgba(0, 217, 255, 0.25);
+            font-size: 0.62rem;
+        }
+
+        /* ===== v2.6: Telegram runtime config form ===== */
+        .tg-runtime {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+            padding: 14px;
+            background: var(--inset-bg);
+            border: 1px dashed var(--card-border);
+            border-radius: 12px;
+            margin-bottom: 14px;
+        }
+        .tg-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+        .tg-field label {
+            font-size: 0.66rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+        }
+        .tg-field input {
+            background: var(--bg-solid);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 9px 12px;
+            font-size: 0.84rem;
+            font-family: var(--mono, monospace);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .tg-field input::placeholder { color: var(--muted); opacity: 0.6; }
+        .tg-field input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.15);
+        }
+        .tg-field .field-sub {
+            font-size: 0.62rem;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+
+        /* ===== v2.6: Browser notification toggle ===== */
+        .browser-notif-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 14px;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            margin-top: 14px;
+        }
+        .notif-toggle {
+            width: 46px;
+            height: 26px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid var(--card-border);
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
+            flex-shrink: 0;
+            padding: 0;
+        }
+        .notif-toggle-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            transition: transform 0.2s ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        }
+        .notif-toggle.on { background: rgba(0, 255, 136, 0.35); border-color: var(--accent-2); }
+        .notif-toggle.on .notif-toggle-thumb { transform: translateX(20px); }
+        .notif-toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+        .browser-notif-text { display: flex; flex-direction: column; gap: 2px; }
+        .browser-notif-text strong { font-size: 0.86rem; color: var(--text); }
+        .browser-notif-text span {
+            font-size: 0.72rem;
+            color: var(--muted);
+        }
+        .browser-notif-text span.state-on { color: var(--accent-2); }
+        .browser-notif-text span.state-blocked { color: var(--danger); }
+
+        /* ===== v2.6: System settings panel ===== */
+        .settings-hint {
+            color: var(--muted);
+            font-size: 0.8rem;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+        .ov-badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 999px;
+            background: rgba(255, 193, 7, 0.15);
+            border: 1px solid rgba(255, 193, 7, 0.4);
+            color: var(--amber);
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .settings-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .setting-row {
+            display: grid;
+            grid-template-columns: minmax(180px, 1.2fr) 200px auto;
+            gap: 12px;
+            align-items: center;
+            padding: 12px 14px;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            transition: border-color 0.15s ease;
+        }
+        .setting-row:hover { border-color: rgba(0, 217, 255, 0.35); }
+        .setting-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .setting-key {
+            font-family: var(--mono, monospace);
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .setting-desc {
+            font-size: 0.72rem;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+        .setting-control { display: flex; gap: 8px; align-items: center; }
+        .setting-input {
+            width: 100%;
+            background: var(--bg-solid);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 8px 12px;
+            font-size: 0.84rem;
+            font-family: var(--mono, monospace);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+            box-sizing: border-box;
+        }
+        .setting-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.15);
+        }
+        .btn-setting-save {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            border: none;
+            color: #04121f;
+            font-weight: 700;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 0.76rem;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+            white-space: nowrap;
+        }
+        .btn-setting-save:hover { transform: translateY(-1px); opacity: 0.92; }
+        .btn-setting-save:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .settings-empty { color: var(--muted); font-size: 0.84rem; text-align: center; padding: 18px; }
+
         /* ===== Responsive ===== */
         @media (max-width: 640px) {
             .container { padding: 14px; }
@@ -1391,6 +1626,10 @@
             .card { padding: 16px; }
             .stat-value { font-size: 1.6rem; }
             .error-banner { flex-wrap: wrap; }
+            .tg-runtime { grid-template-columns: 1fr; }
+            .setting-row { grid-template-columns: 1fr; gap: 8px; }
+            .setting-control { width: 100%; }
+            .browser-notif-row { flex-wrap: wrap; }
         }
 
         @media (max-width: 420px) {
@@ -1430,6 +1669,12 @@
             <span class="banner-msg"><strong>Connection issue:</strong> <span id="error-banner-text">Unknown error</span></span>
             <button class="btn-retry" id="banner-retry">Retry</button>
             <button class="btn-dismiss" id="banner-dismiss" aria-label="Dismiss error">✕</button>
+        </div>
+
+        <!-- Offline banner (v2.6: koneksi internet browser hilang) -->
+        <div class="offline-banner" id="offline-banner" hidden role="alert">
+            <span class="banner-icon">📡</span>
+            <span class="banner-msg"><strong>You're offline</strong> — live updates paused. They resume automatically once the network is back.</span>
         </div>
 
         <header>
@@ -1597,6 +1842,28 @@
                 <code>TELEGRAM_CHAT_ID</code>. Token tidak pernah dikirim ke browser —
                 hanya status dan chat id yang disamarkan.
             </p>
+            <div class="tg-runtime">
+                <div class="tg-field">
+                    <label for="tg-chat-input">Chat ID</label>
+                    <input type="text" id="tg-chat-input" placeholder="e.g. 123456789" autocomplete="off">
+                    <span class="field-sub">Disimpan terenkripsi, diterapkan bersama token.</span>
+                </div>
+                <div class="tg-field">
+                    <label for="tg-token-input">Bot token (write-only)</label>
+                    <input type="password" id="tg-token-input" placeholder="123456:ABC-DEF…" autocomplete="off">
+                    <span class="field-sub">Diverifikasi ke Telegram, lalu tersimpan terenkripsi (Fernet).</span>
+                </div>
+                <button class="btn" id="tg-apply-btn" title="Simpan + terapkan konfigurasi Telegram tanpa restart">💾 Apply</button>
+            </div>
+            <div class="browser-notif-row">
+                <button class="notif-toggle" id="browser-notif-btn" role="switch" aria-checked="false" aria-label="Toggle browser notifications" title="Browser notifications (N)">
+                    <span class="notif-toggle-thumb"></span>
+                </button>
+                <div class="browser-notif-text">
+                    <strong>Browser notifications</strong>
+                    <span id="browser-notif-state">checking…</span>
+                </div>
+            </div>
             <button class="btn" id="tg-test-btn">📨 Send Test Message</button>
         </div>
 
@@ -1615,6 +1882,9 @@
                     dan tetap ada meskipun aplikasi direstart. Alert baru masuk
                     otomatis secara real-time via WebSocket.
                 </p>
+                <button class="filter-chip" id="history-filter-chip" hidden title="Klik untuk menghapus filter">
+                    <span id="history-filter-text"></span> <span class="chip-x">✕</span>
+                </button>
                 <span class="source-badge" id="history-source" title="Sumber data riwayat">⏳ loading</span>
             </div>
             <div class="history-list" id="history-list" aria-live="polite">
@@ -1633,6 +1903,7 @@
                     <option value="48">Last 48h</option>
                     <option value="72">Last 72h</option>
                 </select>
+                <button class="btn btn-ghost" id="heatmap-csv-btn" title="Unduh agregasi heat map sebagai CSV">⬇️ CSV</button>
                 <button class="btn btn-ghost" id="heatmap-refresh-btn" title="Muat ulang heat map">🔄 Refresh</button>
             </span>
         </div>
@@ -1641,6 +1912,7 @@
                 <p class="hm-hint">
                     Intensitas alert per-symbol per-jam. Semakin merah sel,
                     semakin banyak alert ter-trigger pada jam tersebut.
+                    <span class="hm-click-hint">Klik symbol/sel untuk memfilter alert history.</span>
                 </p>
                 <span class="hm-summary" id="heatmap-summary"></span>
             </div>
@@ -1704,14 +1976,35 @@
             </div>
         </div>
 
+        <!-- System Settings (v2.6) -->
+        <div class="section-title">
+            <span>⚙️ System Settings</span>
+            <span class="toolbar">
+                <span class="last-updated" id="settings-updated"></span>
+                <button class="btn btn-ghost" id="settings-refresh-btn" title="Muat ulang settings runtime (S)">🔄 Reload</button>
+            </span>
+        </div>
+        <div class="card">
+            <p class="settings-hint">
+                Runtime configuration — tersimpan di database dan bertahan setelah restart.
+                Nilai yang berbeda dari default ditandai <span class="ov-badge">override</span>.
+                Secret tidak pernah ditampilkan kembali oleh API.
+            </p>
+            <div class="settings-grid" id="settings-grid">
+                <div class="settings-empty">⏳ Loading settings…</div>
+            </div>
+        </div>
+
         <footer>
-            <p>Crypto Oracle AI v2.5 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.6 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
                 <span><span class="kbd">R</span> refresh</span>
                 <span><span class="kbd">T</span> theme</span>
                 <span><span class="kbd">A</span> auto-refresh</span>
                 <span><span class="kbd">H</span> alert history</span>
                 <span><span class="kbd">M</span> maintenance</span>
+                <span><span class="kbd">S</span> settings</span>
+                <span><span class="kbd">N</span> browser notif</span>
                 <span><span class="kbd">Esc</span> close detail</span>
                 <span>click pulse card → detail</span>
             </div>
@@ -1798,6 +2091,8 @@
         let reconnectDelay = 5000;
         let autoRefresh = true;
         let refreshTimer = null;
+        let refreshSeconds = 30;      // v2.6: bisa diubah via runtime settings
+        let anomalyFeedLimit = 25;    // v2.6: bisa diubah via runtime settings
 
         // State data terakhir untuk sorting
         let signalsData = [];
@@ -1965,6 +2260,7 @@
                 addLog(`🔔 Alert [${prio}]: ${escapeHtml(a.rule || '?')} on ${escapeHtml(a.symbol || '?')}`, 'error');
                 toast(`${a.symbol || '?'} — ${a.rule || 'alert'}`, prio === 'HIGH' ? 'error' : 'warn', `Alert ${prio}`);
                 prependHistoryItem(a);
+                pushBrowserNotification(a); // v2.6: desktop notification bila diaktifkan
             }
         }
 
@@ -2027,7 +2323,7 @@
             try {
                 const symbolFilter = document.getElementById('symbol-filter');
                 const selected = symbolFilter.value || '';
-                const qs = new URLSearchParams({ limit: '50' });
+                const qs = new URLSearchParams({ limit: String(anomalyFeedLimit) });
                 if (selected) qs.set('symbol', selected);
                 const response = await fetch(`${API_BASE}/api/anomalies?${qs}`);
                 const data = await response.json();
@@ -2548,10 +2844,40 @@
             }
         }
 
+        // ===== v2.6: history filter (dikendalikan dari heat map) =====
+        let historyFilter = { symbol: null, hours: null };
+
+        function updateHistoryFilterChip() {
+            const chip = document.getElementById('history-filter-chip');
+            const text = document.getElementById('history-filter-text');
+            if (!historyFilter.symbol && !historyFilter.hours) {
+                chip.hidden = true;
+                return;
+            }
+            const parts = [];
+            if (historyFilter.symbol) parts.push(historyFilter.symbol);
+            if (historyFilter.hours) parts.push(`≤ ${historyFilter.hours}h`);
+            text.textContent = `Filter: ${parts.join(' • ')}`;
+            chip.hidden = false;
+        }
+
+        function clearHistoryFilter(silent = false) {
+            historyFilter = { symbol: null, hours: null };
+            document.querySelectorAll('.hm-cell.selected').forEach(el => el.classList.remove('selected'));
+            updateHistoryFilterChip();
+            if (!silent) {
+                loadAlertHistory();
+                addLog('History filter cleared');
+            }
+        }
+
         async function loadAlertHistory() {
             const list = document.getElementById('history-list');
             try {
-                const res = await fetch(`${API_BASE}/api/alerts/history?limit=30`);
+                const qs = new URLSearchParams({ limit: '30' });
+                if (historyFilter.symbol) qs.set('symbol', historyFilter.symbol);
+                if (historyFilter.hours) qs.set('hours', String(historyFilter.hours));
+                const res = await fetch(`${API_BASE}/api/alerts/history?${qs}`);
                 const data = await res.json();
                 if (data.status !== 'success') throw new Error(data.message || 'Failed to load history');
                 setHistorySource(data.source);
@@ -2559,13 +2885,15 @@
 
                 list.innerHTML = '';
                 if (!items.length) {
+                    const filtered = historyFilter.symbol || historyFilter.hours;
                     list.innerHTML = `
                         <div class="hist-empty"><span class="he-icon">📭</span>
-                        No alerts triggered yet — rules are monitored in real-time.
+                        ${filtered ? 'No alerts match the active filter.' : 'No alerts triggered yet — rules are monitored in real-time.'}
                         </div>`;
                 } else {
                     items.forEach(alert => list.appendChild(renderHistoryItem(alert)));
                 }
+                updateHistoryFilterChip();
                 document.getElementById('history-updated').textContent =
                     `Updated ${new Date().toLocaleTimeString()}`;
             } catch (error) {
@@ -2634,11 +2962,14 @@
                     const bg = hmCellColor(count, maxCount, entry.severity);
                     const colDate = new Date(nowMs - (hours - 1 - idx) * 3600000);
                     const title = `${entry.symbol} • ${colDate.toLocaleTimeString([], { hour: '2-digit' })} • ${count ? count + ' alert(s)' : 'no alerts'}`;
-                    cellsHtml += `<div class="hm-cell" title="${escapeHtml(title)}" style="${bg ? 'background:' + bg + ';' : ''}"></div>`;
+                    // v2.6: sel dengan alert bisa diklik untuk memfilter history
+                    const clickable = count ? ' clickable' : '';
+                    const selected = (historyFilter.symbol === entry.symbol && count) ? ' selected' : '';
+                    cellsHtml += `<div class="hm-cell${clickable}${selected}" data-symbol="${escapeHtml(entry.symbol)}" title="${escapeHtml(title)}" style="${bg ? 'background:' + bg + ';' : ''}"></div>`;
                 });
                 html += `
                     <div class="hm-row">
-                        <span class="hm-label ${sevClass}" title="${escapeHtml(entry.symbol)}">${escapeHtml(entry.symbol)}</span>
+                        <span class="hm-label ${sevClass} clickable" data-symbol="${escapeHtml(entry.symbol)}" title="Filter history: ${escapeHtml(entry.symbol)}">${escapeHtml(entry.symbol)}</span>
                         <div class="hm-cells" style="grid-template-columns: repeat(${hours}, 1fr);">${cellsHtml}</div>
                         <span class="hm-total ${entry.total >= 10 ? 'hot' : ''}">${entry.total}</span>
                     </div>`;
@@ -2797,6 +3128,302 @@
             }
         }
 
+        // ===== v2.6: Browser notifications (Notification API) =====
+        const NOTIF_PREF_KEY = 'co_browser_notif';
+        let browserNotifOn = false;
+
+        function updateNotifToggleUI() {
+            const btn = document.getElementById('browser-notif-btn');
+            const label = document.getElementById('browser-notif-state');
+            if (!('Notification' in window)) {
+                btn.disabled = true;
+                label.textContent = 'not supported in this browser';
+                label.className = '';
+                return;
+            }
+            btn.disabled = false;
+            btn.classList.toggle('on', browserNotifOn);
+            btn.setAttribute('aria-checked', String(browserNotifOn));
+            const perm = Notification.permission;
+            if (browserNotifOn) {
+                label.textContent = 'ON — alerts pop up even when tab is in background';
+                label.className = 'state-on';
+            } else if (perm === 'denied') {
+                label.textContent = 'blocked by browser permission — enable it in site settings';
+                label.className = 'state-blocked';
+            } else {
+                label.textContent = 'off — click to receive desktop alerts';
+                label.className = '';
+            }
+        }
+
+        function loadNotifPref() {
+            try { browserNotifOn = localStorage.getItem(NOTIF_PREF_KEY) === '1'; } catch (e) { browserNotifOn = false; }
+            if (browserNotifOn && ('Notification' in window) && Notification.permission !== 'granted') {
+                browserNotifOn = false; // izin dicabut - pref tidak valid
+            }
+            updateNotifToggleUI();
+        }
+
+        async function toggleBrowserNotif() {
+            if (!('Notification' in window)) {
+                toast('Browser notifications are not supported here', 'warn');
+                return;
+            }
+            if (browserNotifOn) {
+                browserNotifOn = false;
+                try { localStorage.setItem(NOTIF_PREF_KEY, '0'); } catch (e) { /* ignore */ }
+                updateNotifToggleUI();
+                toast('Browser notifications disabled', 'info');
+                addLog('Browser notifications disabled');
+                return;
+            }
+            let perm = Notification.permission;
+            if (perm === 'default') {
+                try { perm = await Notification.requestPermission(); } catch (e) { perm = 'denied'; }
+            }
+            if (perm === 'granted') {
+                browserNotifOn = true;
+                try { localStorage.setItem(NOTIF_PREF_KEY, '1'); } catch (e) { /* ignore */ }
+                updateNotifToggleUI();
+                toast('Browser notifications enabled', 'success');
+                addLog('Browser notifications enabled', 'success');
+                try {
+                    new Notification('Crypto Oracle AI', {
+                        body: 'Notifications enabled — you will receive pump/dump alerts here.',
+                        icon: '/static/icons/icon-192.png',
+                    });
+                } catch (e) { /* beberapa browser menolak notif tanpa gesture - abaikan */ }
+            } else {
+                updateNotifToggleUI();
+                toast('Permission denied — enable notifications in browser site settings', 'warn');
+                addLog('Browser notification permission denied', 'error');
+            }
+        }
+
+        function pushBrowserNotification(alert) {
+            if (!browserNotifOn || !('Notification' in window) || Notification.permission !== 'granted') return;
+            const prio = String(alert.priority || 'low').toUpperCase();
+            const title = `${prio === 'HIGH' ? '🚨' : '⚠️'} Alert ${prio}: ${alert.symbol || '?'}`;
+            const parts = [];
+            if (alert.rule) parts.push(String(alert.rule));
+            const spike = Number(alert.volume_spike || 0);
+            if (spike) parts.push(`spike +${spike.toFixed(0)}%`);
+            const price = Number(alert.price || 0);
+            if (price) parts.push(formatPrice(price));
+            try {
+                const n = new Notification(title, {
+                    body: parts.join(' • ') || 'New alert triggered',
+                    icon: '/static/icons/icon-192.png',
+                    tag: `co-alert-${alert.rule}-${alert.symbol}`,
+                });
+                n.onclick = () => { window.focus(); n.close(); };
+            } catch (e) { /* SW-less notification bisa gagal di beberapa browser - abaikan */ }
+        }
+
+        // ===== v2.6: Offline indicator =====
+        function updateOfflineBanner() {
+            const banner = document.getElementById('offline-banner');
+            banner.hidden = navigator.onLine;
+        }
+        window.addEventListener('online', () => {
+            updateOfflineBanner();
+            toast('Back online — resuming live updates', 'success');
+            addLog('Network connection restored', 'success');
+            refreshAll();
+        });
+        window.addEventListener('offline', () => {
+            updateOfflineBanner();
+            addLog('Network connection lost — dashboard paused', 'error');
+        });
+
+        // ===== v2.6: Runtime settings panel =====
+        const REFRESH_OPTIONS = [10, 15, 30, 60, 120, 300];
+        const FEED_OPTIONS = [10, 25, 50, 100, 200];
+
+        function settingRowTemplate(item) {
+            const isOverridden = !!item.overridden;
+            const badge = isOverridden ? '<span class="ov-badge">override</span>' : '';
+            let controlHtml = '';
+            if (item.key === 'dashboard_refresh_seconds') {
+                const opts = REFRESH_OPTIONS.map(v =>
+                    `<option value="${v}" ${Number(item.value) === v ? 'selected' : ''}>${v}s</option>`).join('');
+                controlHtml = `<select class="setting-input" data-key="${item.key}">${opts}</select>`;
+            } else if (item.key === 'anomaly_feed_limit') {
+                const opts = FEED_OPTIONS.map(v =>
+                    `<option value="${v}" ${Number(item.value) === v ? 'selected' : ''}>${v} rows</option>`).join('');
+                controlHtml = `<select class="setting-input" data-key="${item.key}">${opts}</select>`;
+            } else {
+                controlHtml = `<input type="number" class="setting-input" data-key="${item.key}"
+                    value="${escapeHtml(String(item.value ?? ''))}"
+                    min="${item.min ?? 0}" max="${item.max ?? 9999}" step="1">`;
+            }
+            return `
+                <div class="setting-row" data-setting="${escapeHtml(item.key)}">
+                    <div class="setting-info">
+                        <span class="setting-key">${escapeHtml(item.key)} ${badge}</span>
+                        <span class="setting-desc">${escapeHtml(item.description || '')}</span>
+                    </div>
+                    <div class="setting-control">${controlHtml}</div>
+                    <div class="setting-control">
+                        <button class="btn-setting-save" data-save="${escapeHtml(item.key)}">💾 Save</button>
+                    </div>
+                </div>`;
+        }
+
+        async function loadSettings() {
+            const grid = document.getElementById('settings-grid');
+            try {
+                const res = await fetch(`${API_BASE}/api/settings`);
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Failed to load settings');
+                const items = (data.data && data.data.settings) || [];
+                const editable = items.filter(it => it.type !== 'secret');
+                grid.innerHTML = editable.length
+                    ? editable.map(settingRowTemplate).join('')
+                    : '<div class="settings-empty">No editable settings available.</div>';
+                grid.querySelectorAll('[data-save]').forEach(btn => {
+                    btn.addEventListener('click', () => saveSetting(btn.dataset.save));
+                });
+                document.getElementById('settings-updated').textContent =
+                    `Updated ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Settings load error:', error);
+                grid.innerHTML = `<div class="settings-empty" style="color: var(--danger);">⚠️ Failed to load settings: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        async function saveSetting(key) {
+            const row = document.querySelector(`[data-setting="${key}"]`);
+            const input = row ? row.querySelector('[data-key]') : null;
+            const btn = row ? row.querySelector('[data-save]') : null;
+            if (!input || !btn) return;
+            const value = input.value;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = '⏳…';
+            try {
+                const res = await fetch(`${API_BASE}/api/settings`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: { [key]: String(value) } }),
+                });
+                const data = await res.json();
+                const result = (data.results || {})[key] || {};
+                if (!result.ok) throw new Error(result.warning || 'Save failed');
+                toast(
+                    result.warning ? `Saved with warning: ${result.warning}` : `Saved: ${key} = ${value}`,
+                    result.warning ? 'warn' : 'success'
+                );
+                addLog(`Setting saved: ${key} = ${value}${result.warning ? ' (' + result.warning + ')' : ''}`);
+                applySettingSideEffects(key);
+                loadSettings();
+            } catch (error) {
+                toast(`Failed to save ${key}: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = original;
+            }
+        }
+
+        function applySettingSideEffects(key) {
+            if (key === 'alert_history_retention_days') {
+                loadRetention();
+            } else if (key === 'dashboard_refresh_seconds') {
+                const input = document.querySelector(`[data-key="${key}"]`);
+                const secs = Number(input && input.value) || 30;
+                refreshSeconds = Math.max(10, Math.min(secs, 600));
+                if (autoRefresh) setAutoRefresh(true); // restart interval dgn nilai baru
+                addLog(`Auto-refresh interval: ${refreshSeconds}s`);
+            } else if (key === 'anomaly_feed_limit') {
+                fetchAnomalies();
+            }
+        }
+
+        async function applyTelegramRuntime() {
+            const btn = document.getElementById('tg-apply-btn');
+            const chatInput = document.getElementById('tg-chat-input');
+            const tokenInput = document.getElementById('tg-token-input');
+            const chat = chatInput.value.trim();
+            const token = tokenInput.value.trim();
+            if (!chat && !token) {
+                toast('Fill chat id and/or bot token first', 'warn');
+                return;
+            }
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = '⏳ Applying…';
+            try {
+                const updates = {};
+                if (chat) updates.telegram_chat_id = chat;
+                if (token) updates.telegram_bot_token = token;
+                const res = await fetch(`${API_BASE}/api/settings`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates }),
+                });
+                const data = await res.json();
+                const results = data.results || {};
+                const chatRes = results.telegram_chat_id || {};
+                const tokenRes = results.telegram_bot_token || {};
+                if (token && tokenRes.ok) {
+                    toast(`Telegram bot applied: @${(tokenRes.detail || {}).bot_username || '?'}`, 'success');
+                    addLog('Telegram configuration applied at runtime', 'success');
+                    tokenInput.value = '';
+                } else if (token && !tokenRes.ok) {
+                    const reason = (tokenRes.detail || {}).reason || 'unknown';
+                    toast(`Token rejected: ${reason} — check the token and try again`, 'error');
+                    addLog(`Telegram token apply failed: ${reason}`, 'error');
+                } else if (chat && chatRes.ok) {
+                    toast('Chat id saved — it will be used together with the bot token', 'success');
+                }
+                loadTelegramStatus();
+            } catch (error) {
+                toast(`Apply failed: ${error.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = original;
+            }
+        }
+
+        // ===== v2.6: Heat map click-to-filter (event delegation) =====
+        function handleHeatmapClick(event) {
+            const cell = event.target.closest('.hm-cell.clickable');
+            if (cell) {
+                const symbol = cell.dataset.symbol;
+                const alreadySelected = cell.classList.contains('selected');
+                document.querySelectorAll('.hm-cell.selected').forEach(el => el.classList.remove('selected'));
+                if (alreadySelected) {
+                    clearHistoryFilter();
+                    toast('History filter cleared', 'info');
+                    return;
+                }
+                cell.classList.add('selected');
+                historyFilter = { symbol, hours: heatmapHours };
+                updateHistoryFilterChip();
+                loadAlertHistory();
+                document.getElementById('history-filter-chip').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                addLog(`History filtered: ${symbol} (≤ ${heatmapHours}h)`);
+                toast(`History filtered: ${symbol}`, 'info');
+                return;
+            }
+            const label = event.target.closest('.hm-label.clickable');
+            if (label) {
+                const symbol = label.dataset.symbol;
+                if (historyFilter.symbol === symbol && !historyFilter.hours) {
+                    clearHistoryFilter();
+                    toast('History filter cleared', 'info');
+                    return;
+                }
+                document.querySelectorAll('.hm-cell.selected').forEach(el => el.classList.remove('selected'));
+                historyFilter = { symbol, hours: null };
+                updateHistoryFilterChip();
+                loadAlertHistory();
+                addLog(`History filtered: ${symbol} (all time)`);
+                toast(`History filtered: ${symbol}`, 'info');
+            }
+        }
+
         function updateDashboard(data) {
             if (!data) return;
             const system = data.system || {};
@@ -2924,8 +3551,8 @@
             toggle.setAttribute('aria-checked', String(on));
             if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
             if (on) {
-                refreshTimer = setInterval(refreshAll, 30000);
-                addLog('Auto-refresh enabled (30s)');
+                refreshTimer = setInterval(refreshAll, refreshSeconds * 1000);
+                addLog(`Auto-refresh enabled (${refreshSeconds}s)`);
             } else {
                 addLog('Auto-refresh disabled');
             }
@@ -2992,6 +3619,12 @@
                 loadRetention();
                 loadTelegramStatus();
                 toast('Maintenance panels refreshed', 'info');
+            } else if (k === 's') {
+                loadSettings();
+                document.getElementById('settings-grid').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                toast('Runtime settings reloaded', 'info');
+            } else if (k === 'n') {
+                toggleBrowserNotif();
             }
         });
 
@@ -3087,6 +3720,24 @@
         });
         document.getElementById('prune-btn').addEventListener('click', pruneNow);
 
+        // ===== v2.6: Wiring settings, browser notif, heatmap filter, CSV =====
+        document.getElementById('settings-refresh-btn').addEventListener('click', () => {
+            loadSettings();
+            toast('Runtime settings reloaded', 'info');
+        });
+        document.getElementById('tg-apply-btn').addEventListener('click', applyTelegramRuntime);
+        document.getElementById('browser-notif-btn').addEventListener('click', toggleBrowserNotif);
+        document.getElementById('browser-notif-btn').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBrowserNotif(); }
+        });
+        document.getElementById('history-filter-chip').addEventListener('click', () => clearHistoryFilter());
+        document.getElementById('heatmap-grid').addEventListener('click', handleHeatmapClick);
+        document.getElementById('heatmap-csv-btn').addEventListener('click', () => {
+            window.location.href = `${API_BASE}/api/alerts/heatmap.csv?hours=${heatmapHours}`;
+            addLog(`Heat map CSV exported (${heatmapHours}h)`);
+            toast('Heat map CSV downloaded', 'success');
+        });
+
         // ===== Init =====
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
@@ -3097,6 +3748,9 @@
             loadAlertRules();
             loadAlertHistory();
             loadTelegramStatus(); // v2.5
+            loadSettings();       // v2.6
+            loadNotifPref();      // v2.6
+            updateOfflineBanner(); // v2.6
             setAutoRefresh(true); // start interval + log
             addLog('Dashboard initialized');
         });

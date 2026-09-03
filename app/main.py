@@ -20,6 +20,7 @@ from app.database import Database, get_database
 from app.streamer import BinanceStreamer
 from app.analyzer import DeepDiveAnalyzer
 from app.notifier import TelegramNotifier
+from app import runtime_settings
 from app.ui.routes import (
     router as ui_router,
     broadcast_update,
@@ -106,6 +107,15 @@ class CryptoOracleApp:
         # (status + test-send) memakai instance yang benar-benar berjalan.
         set_notifier(self.notifier)
 
+        # v2.6: muat runtime settings tersimpan + terapkan konfigurasi
+        # Telegram yang pernah diubah lewat dashboard (best-effort -
+        # kegagalan jaringan Telegram TIDAK boleh menggagalkan startup).
+        try:
+            await runtime_settings.load_overrides(self.db)
+            await self._apply_persisted_telegram_config()
+        except Exception as e:
+            logger.warning(f"Runtime settings restore skipped: {e}")
+
         # Initialize analyzer
         self.analyzer = DeepDiveAnalyzer(self.db)
         await self.analyzer.start()
@@ -125,6 +135,34 @@ class CryptoOracleApp:
         logger.info("Alert system wired to anomaly pipeline")
 
         logger.info("All components initialized successfully")
+
+    async def _apply_persisted_telegram_config(self) -> None:
+        """Terapkan konfigurasi Telegram tersimpan (v2.6) ke notifier.
+
+        - chat_id tersimpan selalu dipasang (tidak butuh jaringan).
+        - token tersimpan: coba reconfigure (validasi get_me) - bila
+          Telegram tidak terjangkau saat startup, konfigurasi env tetap
+          dipakai dan percobaan ulang bisa dilakukan lewat dashboard.
+        """
+        if not self.notifier:
+            return
+        token = runtime_settings.get_string("telegram_bot_token")
+        chat_id = runtime_settings.get_string("telegram_chat_id")
+        if chat_id and not self.notifier.chat_id:
+            self.notifier.chat_id = str(chat_id)
+            logger.info("Telegram chat_id restored from runtime settings")
+        if token and chat_id:
+            try:
+                result = await self.notifier.reconfigure(token=token, chat_id=chat_id)
+                if result.get("ok"):
+                    logger.info("Telegram bot restored from persisted settings")
+                else:
+                    logger.warning(
+                        "Persisted telegram token invalid/unreachable; "
+                        "keeping environment configuration"
+                    )
+            except Exception as e:
+                logger.warning(f"Telegram reconfigure at startup failed: {e}")
 
     def _spawn_background_task(self, coro) -> asyncio.Task:
         """Create a background task and keep a strong reference to it.
@@ -162,10 +200,13 @@ class CryptoOracleApp:
     async def _prune_alert_history_once(self) -> Optional[int]:
         """Jalankan satu siklus prune alert_history sesuai konfigurasi.
 
+        v2.6: baca override runtime dulu (dashboard), fallback ke env.
+
         Returns:
             Jumlah baris terhapus, None bila auto-prune dimatikan (0 hari).
         """
-        days = int(self.settings.alert_history_retention_days or 0)
+        env_days = int(self.settings.alert_history_retention_days or 0)
+        days = runtime_settings.get_int("alert_history_retention_days", env_days)
         if days <= 0:
             return None
         deleted = await self.db.prune_alert_history(days)
@@ -334,7 +375,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crypto Oracle AI",
     description="Decentralized Pump/Dump Detection System",
-    version="2.5.0",
+    version="2.6.0",
     lifespan=lifespan
 )
 
@@ -362,7 +403,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "name": "Crypto Oracle AI",
-        "version": "2.5.0",
+        "version": "2.6.0",
         "description": "Decentralized Pump/Dump Detection System with Enterprise Security",
         "endpoints": {
             "/health": "Health check endpoint",

@@ -104,6 +104,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    # v2.6: salt untuk enkripsi secret runtime settings (telegram token) di DB
+    dashboard_secret_salt: Optional[str] = Field(
+        default=None,
+        description=(
+            "Salt used to derive the encryption key for secrets stored in the "
+            "app_settings table (e.g. Telegram bot token). Falls back to the "
+            "database URL when unset."
+        ),
+    )
+
     # Dashboard Rate Limiting (per-IP, sliding window, in-memory)
     dashboard_rate_limit: int = Field(
         default=120,

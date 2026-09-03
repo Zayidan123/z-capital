@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.5
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.6
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-189%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-239%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -73,7 +73,7 @@ z-capital/
 │   ├── notifier.py       # Telegram bot notifications
 │   ├── logging_config.py # Structured logging (JSON + console)
 │   └── main.py           # Orchestrator + FastAPI app
-├── tests/                # Test suite lengkap (189 tests, semua mock - tanpa DB/network)
+├── tests/                # Test suite lengkap (239 tests, semua mock - tanpa DB/network)
 ├── scripts/deploy.sh     # Deployment helper
 ├── Dockerfile            # Multi-stage build, non-root user, healthcheck
 ├── docker-compose.yml    # PostgreSQL + Redis (optional) + App
@@ -133,9 +133,12 @@ LOG_LEVEL=INFO
 DASHBOARD_RATE_LIMIT=120
 DASHBOARD_RATE_LIMIT_WINDOW=60
 
-# Alert history retention (v2.5)
+# Alert history retention (v2.5) - dapat dioverride runtime dari dashboard (v2.6)
 ALERT_HISTORY_RETENTION_DAYS=7
 ALERT_RETENTION_INTERVAL_MINUTES=60
+
+# Salt enkripsi secret runtime settings (v2.6, optional - fallback ke DATABASE_URL)
+# DASHBOARD_SECRET_SALT=change_me_random_string
 ```
 
 ### 3. Jalankan Langsung (tanpa Docker)
@@ -185,12 +188,16 @@ docker compose logs -f app
 | `/dashboard/api/symbol/{symbol}` | GET | Detail lengkap satu symbol: agregat + riwayat harga + anomali (`?history_points=10..500`) |
 | `/dashboard/api/alerts/rules` | GET | Daftar alert rules (metadata + threshold, otomatis menerapkan threshold tersimpan DB) |
 | `/dashboard/api/alerts/rules/{name}` | PUT | Ubah threshold rule editable + persist ke DB (body `{"threshold": number}`, response flag `persisted`) |
-| `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`, `?limit=1..200`) |
+| `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`; **v2.6 filter `?symbol=` & `?hours=`** untuk click-to-filter, `?limit=1..200`) |
 | `/dashboard/api/alerts/heatmap` | GET | Agregasi alert per-symbol per-jam untuk heat map (`?hours=6..168`) |
+| `/dashboard/api/alerts/heatmap.csv` | GET | **v2.6** Export agregasi heat map sebagai CSV (`?hours=6..168`; kolom symbol/hour/alert_count/severity) |
+| `/dashboard/api/settings` | GET | **v2.6** Runtime settings: nilai efektif, default, batasan, flag override/persisted — secret tidak pernah dikembalikan |
 | `/dashboard/api/alerts/retention` | GET | Info retensi alert_history: konfigurasi, hasil prune terakhir, statistik tabel |
 | `/dashboard/api/alerts/prune` | POST | Prune manual alert_history (body opsional `{"days": 1..365}`; default pengaturan retensi) |
 | `/dashboard/api/telegram/status` | GET | Status notifikasi Telegram (flag configured, username bot, chat id tersamarkan — **tanpa token**) |
 | `/dashboard/api/telegram/test` | POST | Kirim pesan test ke Telegram (response `sent` + `reason`, gagal kirim = hasil bukan error) |
+| `/dashboard/api/settings` | PUT | **v2.6** Terapkan + persist runtime settings (int di-clamp dengan warning; token Telegram diverifikasi ke API lalu disimpan terenkripsi Fernet) |
+| `/dashboard/manifest.webmanifest` | GET | **v2.6** PWA manifest (install dashboard ke homescreen; ikon 192/512) |
 | `/dashboard/api/backtest/{symbol}` | POST | Backtest strategi volume-spike (body `{"days": 1..90, "volume_threshold": 10..10000}`) |
 | `/dashboard/api/export/signals.csv` | GET | Export sinyal ke file CSV (support `?limit=`) |
 | `/dashboard/api/security/audit` | GET | Jalankan audit keamanan (dependency scan + pentest) |
@@ -201,7 +208,9 @@ docker compose logs -f app
 >
 > 🚦 **Rate limiting**: semua endpoint `/dashboard/api/*` dibatasi **120 request/menit per IP** (sliding window in-memory, per-endpoint). Melebihi kuota → HTTP 429 + header `Retry-After`. Atur via `DASHBOARD_RATE_LIMIT` (0 = nonaktif) dan `DASHBOARD_RATE_LIMIT_WINDOW` (detik).
 >
-> 🧹 **Retensi alert_history (v2.5)**: baris lebih tua dari `ALERT_HISTORY_RETENTION_DAYS` (default 7, 0 = off) dihapus otomatis oleh loop background tiap `ALERT_RETENTION_INTERVAL_MINUTES` (default 60). Prune manual tersedia via tombol **Prune Now** di dashboard atau `POST /dashboard/api/alerts/prune`.
+> 🧹 **Retensi alert_history (v2.5)**: baris lebih tua dari `ALERT_HISTORY_RETENTION_DAYS` (default 7, 0 = off) dihapus otomatis oleh loop background tiap `ALERT_RETENTION_INTERVAL_MINUTES` (default 60). **v2.6**: nilai env dapat dioverride dari dashboard (System Settings) dan loop membaca override tiap siklus. Prune manual tersedia via tombol **Prune Now** di dashboard atau `POST /dashboard/api/alerts/prune`.
+>
+> ⚙️ **Runtime settings (v2.6)**: ubah konfigurasi tanpa restart via panel **System Settings** (tersimpan di tabel `app_settings`, bertahan restart). Key yang tersedia: `alert_history_retention_days` (0–365), `dashboard_refresh_seconds` (10–600), `anomaly_feed_limit` (10–200), plus konfigurasi Telegram runtime (`telegram_bot_token` dienkripsi Fernet dengan kunci derivasi dari `DASHBOARD_SECRET_SALT`/DATABASE_URL — write-only, tidak pernah dikirim balik ke browser; `telegram_chat_id`). Nilai selain default ditandai badge **override**.
 
 ---
 
@@ -214,6 +223,7 @@ docker compose logs -f app
 | `signals_sent` | Riwayat sinyal Telegram (status sent/failed) |
 | `alert_rules` | Threshold alert rules yang diubah via dashboard (**survive restart**, v2.4) |
 | `alert_history` | Riwayat alert ter-trigger (rule, priority, symbol, data JSONB — persisten v2.4; auto-prune via retensi v2.5) |
+| `app_settings` | Runtime settings key-value (v2.6): retensi, refresh interval, feed limit, konfigurasi Telegram (secret terenkripsi) — survive restart |
 
 ---
 
@@ -232,7 +242,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 189 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history dari DB, **heat map agregasi, retensi + prune manual, status/test notifikasi Telegram**, backtest, sparkline, CSV export, opt-in API key auth, integrasi pipeline anomaly → alert → WebSocket, serta **loop housekeeping retensi background**).
+**Status saat ini: 239 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, integrasi pipeline anomaly → alert → WebSocket, loop housekeeping retensi yang membaca **override runtime**, dan **regression guard selector CSS `[hidden]`**).
 
 ---
 
@@ -334,6 +344,18 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
 - **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
 - **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
+
+### ✨ v2.6 — Runtime Settings, Click-to-Filter, Browser Notifications & PWA
+- **⚙️ Panel System Settings** — ubah konfigurasi runtime langsung dari dashboard tanpa restart: `alert_history_retention_days`, `dashboard_refresh_seconds` (interval auto-refresh berubah live), `anomaly_feed_limit` (ukuran feed anomali). Nilai tersimpan di tabel `app_settings` (survive restart), badge **override** untuk nilai ≠ default, validasi int dengan clamp + warning toast, endpoint `GET/PUT /api/settings` (terproteksi API key + rate limit)
+- **🔐 Konfigurasi Telegram runtime** — form chat id + bot token (write-only password field) di panel Notification Settings: token diverifikasi ke API Telegram (`get_me`) sebelum dipasang ke notifier yang berjalan (`notifier.reconfigure()` — state lama dipertahankan bila token invalid), lalu disimpan **terenkripsi Fernet** (kunci derivasi dari `DASHBOARD_SECRET_SALT` atau `DATABASE_URL`) dan di-restore otomatis saat restart (best-effort — startup tidak pernah gagal karena Telegram down). Chat id tanpa token ditolak; token invalid TIDAK dipersist agar DB tidak berisi token mati
+- **🖱️ Heat map click-to-filter** — klik label symbol (all-time) atau sel ber-alert (symbol + window jam) di heat map → panel Alert History terfilter otomatis dengan chip cyan "Filter: PEPEUSDT • ≤ 24h" yang bisa diklik untuk reset; endpoint history mendukung `?symbol=` & `?hours=`
+- **🔔 Browser notifications** — toggle switch di Notification Settings (Notification API): izin dikelola dengan rapi (default/denied/granted), preferensi persist di localStorage, alert `alert_triggered` via WebSocket memunculkan desktop notification (judul prioritas + symbol + spike/harga, klik fokus ke tab), degradasi graceful di browser tanpa dukungan; shortcut `N`
+- **📡 Offline indicator** — banner amber "You're offline" otomatis via event `offline`/`online` browser (dicek native via `agent-browser set offline`), kembali online → toast + auto refresh semua panel
+- **📱 PWA** — manifest `/dashboard/manifest.webmanifest` + ikon PNG 192/512 + favicon + apple-touch-icon + `theme-color`: dashboard bisa di-install ke homescreen sebagai standalone app
+- **⬇️ Export CSV heat map** — tombol CSV di panel heat map → `GET /api/alerts/heatmap.csv?hours=` (kolom symbol/hour/alert_count/severity)
+- **⌨️ Shortcut `S`** — reload + scroll ke System Settings (footer v2.6)
+- **🐛 Fix bug kritis QA** — selector CSS ter-korupsi `.error-banneridden]` / `.modal-backdropidden]` (kehilangan `[h`) sejak ronde sebelumnya: atribut `hidden` kalah oleh `display:flex` → **backdrop modal transparan (inset 0, z-index 200) selalu menutupi halaman dan memblokir SEMUA klik mouse asli**, plus banner error/offline selalu tampil. Diperbaiki + regression guard test (`TestDashboardHtmlIntegrity`) agar tidak terulang; diverifikasi QA klik mouse real (bukan eval-click) bekerja normal
+- **+50 test baru** — DB app_settings CRUD + filter history, enkripsi/dekripsi secret, validasi/clamp, cache override, payload GET tanpa kebocoran secret, notifier.reconfigure (sukses/invalid token menjaga state lama/tanpa token di hasil), endpoint settings (shape, override, clamp persist, unknown key, token apply+encrypt, token invalid tidak persist, token tanpa chat ditolak), history filter endpoint, heatmap.csv, manifest, ikon, retensi efektif dari override, restore Telegram startup, guard HTML → total **239 tests**
 
 ### ✨ v2.5 — Heat Map Agregasi, Retensi Otomatis & Panel Notifikasi
 - **🔥 Alert Heat Map** — agregasi alert per-symbol per-jam dari DB (endpoint `/api/alerts/heatmap?hours=6..168`): grid sel berwarna intensitas merah (semakin banyak alert semakin pekat), label severity per-symbol (HIGH merah / MEDIUM amber), total per-symbol, sumbu waktu (-6h … now), summary chips (Σ alerts + top symbol), legend gradient, window selector 12/24/48/72 jam, scroll horizontal di mobile, tooltip per-sel, auto-refresh ikut polling 30s

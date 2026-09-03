@@ -24,8 +24,29 @@ from app import database as app_database
 from app.config import get_settings
 from app.database import get_recent_signals, get_system_stats
 from app.dashboard import AlertSystem, BacktestEngine
+from app.runtime_settings import (
+    SPECS_BY_KEY,
+    build_settings_payload,
+    defaults_from_env,
+    encrypt_secret,
+    is_encrypted,
+    decrypt_secret,
+    load_overrides,
+    validate_value,
+)
 from app.security.hardening import signal_validator, penetration_tester, dependency_auditor
 from app.ui.rate_limit import rate_limit_dependency, reset_all_limiters
+
+
+def _effective_retention_days() -> int:
+    """Hari retensi efektif (v2.6): override runtime dulu, fallback env.
+
+    Dipakai endpoint retention agar panel dashboard menampilkan nilai
+    yang sama dengan yang dipakai loop prune di main.py.
+    """
+    from app import runtime_settings as _rs
+    env_days = get_settings().alert_history_retention_days
+    return _rs.get_int("alert_history_retention_days", env_days)
 
 router = APIRouter()
 
@@ -126,6 +147,14 @@ class PruneRequest(BaseModel):
     days: Optional[int] = Field(
         default=None, ge=1, le=365,
         description="Retensi manual (hari). Default: pengaturan retention.",
+    )
+
+
+class SettingsUpdateRequest(BaseModel):
+    """Body PUT /api/settings (v2.6): {updates: {key: value_str}}"""
+    updates: Dict[str, str] = Field(
+        description="Peta key -> nilai baru. Secret dikirim plaintext lalu "
+                    "dienkripsi sebelum disimpan.",
     )
 
 # Path template relatif terhadap file ini (bukan hard-coded /app)
@@ -416,17 +445,27 @@ async def update_alert_rule(name: str, body: RuleUpdateRequest):
 
 
 @router.get("/api/alerts/history", dependencies=API_DEPS)
-async def get_alert_history(limit: int = 25):
+async def get_alert_history(
+    limit: int = 25,
+    symbol: Optional[str] = None,
+    hours: Optional[int] = None,
+):
     """Riwayat alert yang pernah ter-trigger.
 
     v2.4: sumber utama kini tabel alert_history di DB (persisten, tahan
     restart). Bila DB gagal, fallback ke riwayat in-memory sejak proses
     start dengan flag "source" yang sesuai.
+    v2.6: filter opsional `symbol` (exact) dan `hours` (jendela waktu)
+    untuk click-to-filter dari heat map.
     """
     try:
         limit = max(1, min(limit, 200))
+        symbol_f = (symbol or None) if symbol is None else str(symbol).strip().upper() or None
+        hours_f = max(1, min(int(hours), 720)) if hours else None
         try:
-            history = await app_database.db.get_alert_history(limit=limit)
+            history = await app_database.db.get_alert_history(
+                limit=limit, symbol=symbol_f, hours=hours_f
+            )
             source = "database"
         except Exception as db_err:
             logger.warning(f"Alert history DB unavailable, using memory: {db_err}")
@@ -437,6 +476,7 @@ async def get_alert_history(limit: int = 25):
             "timestamp": _utc_now_iso(),
             "source": source,
             "count": len(history),
+            "filters": {"symbol": symbol_f, "hours": hours_f},
             "data": history,
         }
     except Exception as e:
@@ -484,6 +524,42 @@ async def get_alert_heatmap(hours: int = 24):
         return {"status": "error", "message": str(e)}
 
 
+@router.get("/api/alerts/heatmap.csv", dependencies=API_DEPS)
+async def export_alert_heatmap_csv(hours: int = 24):
+    """Export agregasi heat map sebagai file CSV (v2.6).
+
+    Kolom: symbol, hour (ISO-8601 UTC), alert_count, severity
+    (0=low, 1=medium, 2=high). Window di-clamp 6..168 sama seperti
+    endpoint JSON.
+    """
+    try:
+        window = max(6, min(hours, 168))
+        rows = await app_database.db.get_alert_heatmap(hours=window)
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["symbol", "hour", "alert_count", "severity"])
+        for r in rows:
+            hour = r.get("hour")
+            writer.writerow([
+                r.get("symbol", ""),
+                hour.isoformat() if hasattr(hour, "isoformat") else str(hour),
+                int(r.get("count") or 0),
+                int(r.get("severity") or 0),
+            ])
+        buffer.seek(0)
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"alert_heatmap_{window}h_{stamp}.csv"
+        return StreamingResponse(
+            iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/api/alerts/retention", dependencies=API_DEPS)
 async def get_alert_retention():
     """Info retensi alert_history untuk panel maintenance (v2.5).
@@ -493,7 +569,7 @@ async def get_alert_retention():
     gagal, konfigurasi tetap dikirim dengan flag db_ok=false.
     """
     settings = get_settings()
-    retention_days = settings.alert_history_retention_days
+    retention_days = _effective_retention_days()
     interval = settings.alert_retention_interval_minutes
 
     db_ok = True
@@ -533,7 +609,7 @@ async def prune_alert_history(body: Optional[PruneRequest] = None):
     """
     try:
         settings = get_settings()
-        days = body.days if (body and body.days) else settings.alert_history_retention_days
+        days = body.days if (body and body.days) else _effective_retention_days()
         if not days or days <= 0:
             days = 7
         days = max(1, min(int(days), 365))
@@ -617,6 +693,164 @@ async def send_telegram_test():
     except Exception as e:
         logger.warning(f"Telegram test send failed: {e}")
         return {"status": "success", "sent": False, "reason": "error", "message": str(e)}
+
+
+# ===== v2.6: Runtime settings (GET/PUT) =====
+
+async def _apply_telegram_update(key: str, value: str) -> Optional[Dict[str, Any]]:
+    """Terapkan perubahan telegram_* ke notifier yang sedang berjalan.
+
+    Telegram chat id hanya disimpan + diterapkan bersama token (chat id
+    tanpa token tidak mengubah Bot). Return dict hasil reconfigure bila
+    token baru diterapkan, selain itu None.
+    """
+    if key != "telegram_bot_token":
+        return None
+    notifier = get_notifier()
+    if notifier is None or not hasattr(notifier, "reconfigure"):
+        return {"ok": False, "reason": "not_running", "message": "Notifier not running"}
+    chat_plain = None
+    try:
+        stored = await app_database.db.get_app_settings(keys=["telegram_chat_id"])
+        raw = stored.get("telegram_chat_id")
+        chat_plain = decrypt_secret(raw) if (raw and is_encrypted(raw)) else raw
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Could not read stored chat_id for reconfigure: {e}")
+    if not chat_plain:
+        return {
+            "ok": False,
+            "reason": "missing_chat_id",
+            "message": "Set telegram_chat_id together with the token.",
+        }
+    return await notifier.reconfigure(token=value, chat_id=chat_plain)
+
+
+@router.get("/api/settings", dependencies=API_DEPS)
+async def get_runtime_settings():
+    """Daftar runtime settings yang bisa diubah dari dashboard (v2.6).
+
+    Secret (telegram token/chat id) TIDAK pernah dikembalikan nilainya -
+    hanya flag set/persisted dan chat id tersamarkan.
+    """
+    try:
+        defaults = defaults_from_env()
+        try:
+            db_values = await load_overrides(app_database.db)
+        except Exception as db_err:
+            logger.warning(f"Runtime settings load failed: {db_err}")
+            db_values = {}
+        payload = build_settings_payload(db_values, defaults)
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "data": payload,
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.put("/api/settings", dependencies=API_DEPS)
+async def update_runtime_settings(body: SettingsUpdateRequest):
+    """Terapkan + persist runtime settings (v2.6).
+
+    - Key tidak dikenal -> entri results dgn ok=false, request tetap 200
+      agar UI bisa menampilkan hasil per-key.
+    - Nilai int di-clamp sesuai spec (warning dicatat).
+    - telegram_bot_token diterapkan ke notifier runtime; bila gagal
+      (token tidak valid / chat id belum ada), persist TETAP dilakukan
+      hanya bila token diterima Telegram (hasil ok) agar DB tidak berisi
+      token mati. chat_id selalu bisa dipersist sendiri.
+    """
+    results: Dict[str, Any] = {}
+    notifier_state: Optional[Dict[str, Any]] = None
+
+    for key, raw_value in body.updates.items():
+        spec = SPECS_BY_KEY.get(key)
+        if spec is None:
+            results[key] = {"ok": False, "warning": "unknown key"}
+            continue
+
+        check = validate_value(spec, raw_value)
+        if not check["ok"]:
+            results[key] = {"ok": False, "warning": check["warning"]}
+            continue
+
+        value = check["value"]
+        try:
+            if spec["type"] == "secret" and key == "telegram_bot_token":
+                stored_value = encrypt_secret(value)
+            else:
+                stored_value = value
+
+            if key == "telegram_bot_token":
+                # Terapkan dulu ke runtime; persist hanya bila token valid
+                notifier_state = await _apply_telegram_update(key, value)
+                if notifier_state and notifier_state.get("ok"):
+                    await app_database.db.set_app_setting(key, stored_value)
+                results[key] = {
+                    "ok": bool(notifier_state and notifier_state.get("ok")),
+                    "applied": bool(notifier_state and notifier_state.get("ok")),
+                    "persisted": bool(notifier_state and notifier_state.get("ok")),
+                    "warning": check["warning"],
+                    "detail": notifier_state,
+                }
+                continue
+
+            await app_database.db.set_app_setting(key, stored_value)
+            # Perbarui cache override agar loop terpengaruh tanpa reload
+            from app import runtime_settings as _rs
+            _rs._cache[key] = stored_value
+            results[key] = {
+                "ok": True,
+                "applied": True,
+                "persisted": True,
+                "warning": check["warning"],
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Failed to persist setting {key}: {e}")
+            results[key] = {"ok": False, "warning": str(e)}
+
+    return {
+        "status": "success",
+        "timestamp": _utc_now_iso(),
+        "results": results,
+    }
+
+
+@router.get("/manifest.webmanifest", include_in_schema=False)
+async def pwa_manifest():
+    """PWA manifest (v2.6): membuat dashboard bisa di-install ke homescreen.
+
+    Endpoint publik (tanpa auth) karena browser memuatnya di luar API
+    context dan tidak membocorkan data apa pun.
+    """
+    from fastapi.responses import JSONResponse
+
+    manifest = {
+        "name": "Crypto Oracle AI",
+        "short_name": "CryptoOracle",
+        "description": "Real-time pump/dump detection dashboard",
+        "start_url": "/dashboard",
+        "scope": "/dashboard",
+        "display": "standalone",
+        "background_color": "#0a0e17",
+        "theme_color": "#0a0e17",
+        "icons": [
+            {
+                "src": "/static/icons/icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": "/static/icons/icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any maskable",
+            },
+        ],
+    }
+    return JSONResponse(content=manifest)
 
 
 @router.post("/api/backtest/{symbol}", dependencies=API_DEPS)

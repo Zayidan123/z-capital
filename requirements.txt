@@ -47,3 +47,6 @@ tzdata>=2023.3
 
 # Security & Dependency Scanning
 requests>=2.31.0
+
+# Encryption untuk secret runtime settings (v2.6: bot token terenkripsi di DB)
+cryptography>=42.0.0

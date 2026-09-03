@@ -54,7 +54,7 @@ class TelegramNotifier:
         """Initialize the Telegram bot"""
         if self.settings.telegram_bot_token:
             self.bot = Bot(token=self.settings.telegram_bot_token)
-            
+
             try:
                 # Test connection
                 me = await self.bot.get_me()
@@ -66,6 +66,53 @@ class TelegramNotifier:
                 self.bot_username = None
         else:
             logger.warning("Telegram notifier disabled - no bot token")
+
+    async def reconfigure(self, token: str, chat_id: str) -> Dict[str, Any]:
+        """Konfigurasi ulang bot saat runtime (v2.6) tanpa restart proses.
+
+        Membuat Bot baru dari token yang diberikan, memverifikasi via
+        get_me(), lalu memasang chat_id baru. Bila verifikasi gagal,
+        state lama DIPERTAHANKAN (token lama tetap aktif) dan dict hasil
+        berisi ok=False + reason.
+
+        Returns:
+            {ok, bot_username, chat_id_masked, reason?} - token tidak
+            pernah disertakan dalam hasil.
+        """
+        old_bot = self.bot
+
+        candidate = Bot(token=token)
+        try:
+            me = await candidate.get_me()
+        except Exception as e:
+            logger.warning(f"Runtime reconfigure rejected: invalid bot token ({e})")
+            try:
+                await candidate.shutdown()
+            except Exception:
+                pass
+            return {
+                "ok": False,
+                "reason": "invalid_token",
+                "detail": str(e),
+                "bot_username": self.bot_username,
+                "chat_id_masked": self.get_status().get("chat_id_masked"),
+            }
+
+        # Sukses: shutdown bot lama (best-effort) lalu pasang kandidat
+        if old_bot is not None:
+            try:
+                await old_bot.shutdown()
+            except Exception as e:
+                logger.debug(f"Old telegram bot shutdown error: {e}")
+        self.bot = candidate
+        self.bot_username = getattr(me, "username", None)
+        self.chat_id = str(chat_id).strip()
+        logger.info(f"Telegram notifier reconfigured at runtime: @{self.bot_username}")
+        return {
+            "ok": True,
+            "bot_username": self.bot_username,
+            "chat_id_masked": self.get_status().get("chat_id_masked"),
+        }
     
     async def stop(self) -> None:
         """Cleanup resources"""
