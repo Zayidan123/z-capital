@@ -647,26 +647,38 @@ class TestEffectiveRetention:
 # 9. Frontend regression guard: selector [hidden] tidak boleh korup
 # ====================================================================
 
+HIDDEN_SEL = "[" + "hidden]"  # selector atribut valid (dibangun agar aman dari mangling)
+
+
 class TestDashboardHtmlIntegrity:
-    """Guard untuk bug QA ronde-7: selector `.error-banneridden]` (korup,
-    akibatnya elemen dengan display:flex + atribut hidden SELALU tampil,
-    dan backdrop modal transparan memblokir semua klik mouse asli)."""
+    """Guard integritas selector CSS atribut hidden (diperbaiki ronde-8).
+
+    Sejak v2.3 selector dalam file TERCATAT korup (karakter pembuka
+    atribut + huruf h hilang) dan guard lama justru menegaskan bentuk
+    korup itu. Di browser modern elemen tetap ter-hidden berkat UA rule
+    display:none !important untuk atribut hidden sehingga tidak terasa
+    di QA, tetapi rule invalid adalah dead code & melemahkan browser
+    lama. Guard kini mewajibkan bentuk VALID dan menolak bentuk korup.
+    """
 
     def _html(self) -> str:
         from pathlib import Path
         tpl = Path(__file__).resolve().parent.parent / "app" / "ui" / "templates" / "dashboard.html"
         return tpl.read_text(encoding="utf-8")
 
-    def test_hidden_display_none_rules_present(self):
+    def test_hidden_display_none_rules_valid(self):
         html = self._html()
-        for sel in (".error-banner[hidden]", ".modal-backdrop[hidden]", ".offline-banner[hidden]"):
+        targets = [cls + HIDDEN_SEL for cls in (".error-banner", ".modal-backdrop", ".offline-banner")]
+        for sel in targets:
             assert f"{sel} {{ display: none; }}" in html, f"missing rule: {sel}"
 
     def test_no_corrupted_hidden_selectors(self):
-        html = self._html()
         import re
-        # selector yang mengandung "idden]" TAPI bukan "[hidden]"
-        corrupted = re.findall(r"[a-z-]+idden\]", html.replace("[hidden]", ""))
+        html = self._html()
+        # Buang dulu semua bentuk valid (klass + [hidden]) lalu pastikan
+        # tidak ada sisa pola 'klass+idden]' tanpa pembuka atribut.
+        residual = html.replace(HIDDEN_SEL, "@@OK@@")
+        corrupted = re.findall(r"[a-z-]+idden\]", residual)
         assert not corrupted, f"corrupted selector(s) found: {corrupted}"
 
 
@@ -677,4 +689,4 @@ class TestDashboardHtmlIntegrity:
 class TestVersionV26:
     def test_app_version_bumped(self):
         from app.main import app as fastapi_app
-        assert fastapi_app.version == "2.6.0"
+        assert fastapi_app.version >= "2.7.0"

@@ -1645,6 +1645,101 @@
                 transition-duration: 0.01ms !important;
             }
         }
+
+        /* ===== v2.7: Rule audit sparkline + import/export + palette + i18n ===== */
+        .rule-audit {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 150px;
+            align-items: flex-start;
+        }
+        .rule-spark { display: block; border-radius: 6px; }
+        .rule-spark-meta { font-size: 0.68rem; color: var(--muted); }
+        .rule-spark-meta strong { color: var(--accent); font-weight: 700; }
+        .rule-spark-meta .never { opacity: 0.7; }
+
+        /* v2.7: Import rules modal (reuse .modal-backdrop) */
+        .modal-sm { max-width: 580px; width: 100%; }
+        .import-file-row { margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+        .import-file-row input[type="file"] {
+            color: var(--muted); font-size: 0.76rem; width: 100%;
+            background: var(--inset-bg); border: 1px solid var(--card-border);
+            border-radius: 8px; padding: 8px;
+        }
+        .import-textarea {
+            width: 100%;
+            background: var(--log-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.76rem;
+            line-height: 1.55;
+            resize: vertical;
+            min-height: 150px;
+        }
+        .import-textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+        .import-actions {
+            display: flex; align-items: center; gap: 10px;
+            margin-top: 12px; justify-content: flex-end; flex-wrap: wrap;
+        }
+        .import-status { font-size: 0.75rem; color: var(--muted); flex: 1; min-width: 160px; }
+        .import-status.ok { color: var(--accent-2); }
+        .import-status.err { color: var(--danger); }
+
+        /* v2.7: Command palette */
+        .palette-backdrop { align-items: flex-start; padding-top: 12vh; }
+        .palette {
+            background: var(--bg-solid);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            width: min(560px, 94vw);
+            overflow: hidden;
+            animation: paletteIn 0.18s ease;
+        }
+        @keyframes paletteIn {
+            from { opacity: 0; transform: translateY(-8px) scale(0.985); }
+            to { opacity: 1; transform: none; }
+        }
+        .palette-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid var(--card-border);
+            color: var(--text);
+            padding: 16px 18px;
+            font-size: 0.95rem;
+            font-family: inherit;
+        }
+        .palette-input:focus { outline: none; }
+        .palette-input::placeholder { color: var(--muted); }
+        .palette-list { max-height: 320px; overflow-y: auto; padding: 6px; }
+        .palette-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px;
+            cursor: pointer; font-size: 0.85rem; color: var(--text);
+            transition: background 0.12s ease;
+        }
+        .palette-item .p-icon { width: 22px; text-align: center; }
+        .palette-item .p-hint { margin-left: auto; color: var(--muted); font-size: 0.7rem; }
+        .palette-item:hover { background: var(--inset-bg); }
+        .palette-item.active { background: var(--inset-bg); outline: 1px solid var(--accent); }
+        .palette-empty { padding: 18px; color: var(--muted); font-size: 0.82rem; text-align: center; }
+        .palette-foot {
+            display: flex; gap: 14px; padding: 9px 14px;
+            border-top: 1px solid var(--card-border);
+            color: var(--muted); font-size: 0.68rem; flex-wrap: wrap;
+        }
+
+        @media (max-width: 640px) {
+            .rule-audit { min-width: 100%; flex-direction: row; align-items: center; gap: 12px; }
+            .palette-backdrop { padding-top: 6vh; }
+            .import-actions { justify-content: stretch; }
+            .import-actions .btn { flex: 1; }
+        }
     </style>
 </head>
 <body>
@@ -1687,6 +1782,8 @@
                     <div class="status-dot"></div>
                     <span id="status-text">LIVE</span>
                 </div>
+                <button class="theme-btn" id="lang-btn" title="Bahasa / Language (L)" aria-label="Ganti bahasa ID/EN">🌐 EN</button>
+                <button class="theme-btn" id="palette-btn" title="Command palette (Ctrl+K)" aria-label="Buka command palette">⌘K</button>
                 <button class="theme-btn" id="theme-btn" title="Toggle theme (T)" aria-label="Toggle light/dark theme">☀️</button>
             </div>
         </header>
@@ -1721,7 +1818,7 @@
 
         <!-- Market Pulse -->
         <div class="section-title">
-            <span>📈 Market Pulse</span>
+            <span data-i18n="title.pulse">📈 Market Pulse</span>
             <span class="last-updated" id="pulse-updated"></span>
         </div>
         <div class="pulse-grid" id="pulse-grid">
@@ -1733,7 +1830,7 @@
 
         <!-- Recent Signals -->
         <div class="section-title">
-            <span>🔔 Recent Signals</span>
+            <span data-i18n="title.signals">🔔 Recent Signals</span>
             <span class="toolbar">
                 <span class="last-updated" id="signals-updated"></span>
                 <span class="toggle-wrap on" id="auto-refresh-toggle" role="switch" aria-checked="true" tabindex="0" title="Auto-refresh data setiap 30 detik (shortcut: A)">
@@ -1764,7 +1861,7 @@
 
         <!-- Recent Anomalies -->
         <div class="section-title">
-            <span>📉 Recent Volume Anomalies</span>
+            <span data-i18n="title.anomalies">📉 Recent Volume Anomalies</span>
             <span class="toolbar">
                 <select class="filter-select" id="symbol-filter" aria-label="Filter anomalies by symbol" disabled>
                     <option value="">All symbols</option>
@@ -1792,12 +1889,14 @@
         </div>
 
         <!-- Alert Rules (v2.3) -->
-        <div class="section-title"><span>🔔 Alert Rules</span></div>
+        <div class="section-title"><span data-i18n="title.rules">🔔 Alert Rules</span></div>
         <div class="card">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
-                <p style="color: var(--muted); font-size: 0.82rem; flex: 1; min-width: 220px;">
+                <p data-i18n="rules.hint" style="color: var(--muted); font-size: 0.82rem; flex: 1; min-width: 220px;">
                     Atur ambang pemicu notifikasi. Perubahan berlaku langsung pada engine alert.
                 </p>
+                <button class="btn btn-ghost" id="rules-export-btn" title="Unduh semua rules sebagai file JSON (backup)">⬇️ JSON</button>
+                <button class="btn btn-ghost" id="rules-import-btn" title="Import threshold rules dari file/teks JSON">⬆️ Import</button>
                 <button class="btn btn-ghost" id="rules-refresh-btn" title="Muat ulang rules">🔄 Reload</button>
             </div>
             <div class="rules-list" id="rules-list">
@@ -1807,7 +1906,7 @@
 
         <!-- Notification Settings (v2.5) -->
         <div class="section-title">
-            <span>📨 Notification Settings</span>
+            <span data-i18n="title.notif">📨 Notification Settings</span>
             <span class="toolbar">
                 <span class="last-updated" id="tg-updated"></span>
                 <button class="btn btn-ghost" id="tg-refresh-btn" title="Muat ulang status notifikasi">🔄 Refresh</button>
@@ -1869,7 +1968,7 @@
 
         <!-- Alert History (v2.4) -->
         <div class="section-title">
-            <span>🚨 Alert History</span>
+            <span data-i18n="title.history">🚨 Alert History</span>
             <span class="toolbar">
                 <span class="last-updated" id="history-updated"></span>
                 <button class="btn btn-ghost" id="history-refresh-btn" title="Muat ulang riwayat alert">🔄 Refresh</button>
@@ -1894,7 +1993,7 @@
 
         <!-- Alert Heat Map (v2.5) -->
         <div class="section-title">
-            <span>🔥 Alert Heat Map</span>
+            <span data-i18n="title.heatmap">🔥 Alert Heat Map</span>
             <span class="toolbar">
                 <span class="last-updated" id="heatmap-updated"></span>
                 <select class="filter-select" id="heatmap-hours" aria-label="Heat map window (hours)">
@@ -1925,7 +2024,7 @@
 
         <!-- Data Retention (v2.5) -->
         <div class="section-title">
-            <span>🧹 Data Retention</span>
+            <span data-i18n="title.retention">🧹 Data Retention</span>
             <span class="toolbar">
                 <span class="last-updated" id="ret-updated"></span>
                 <button class="btn btn-ghost" id="ret-refresh-btn" title="Muat ulang info retensi">🔄 Refresh</button>
@@ -1957,7 +2056,7 @@
         </div>
 
         <!-- Security Audit -->
-        <div class="section-title"><span>🛡️ Security Audit</span></div>
+        <div class="section-title"><span data-i18n="title.audit">🛡️ Security Audit</span></div>
         <div class="card">
             <button class="btn" onclick="runSecurityAudit()">🛡️ Run Security Audit</button>
             <div id="audit-results" style="margin-top: 20px;">
@@ -1966,7 +2065,7 @@
         </div>
 
         <!-- Live Logs -->
-        <div class="section-title"><span>📝 Live System Logs</span></div>
+        <div class="section-title"><span data-i18n="title.logs">📝 Live System Logs</span></div>
         <div class="card">
             <div class="log-container" id="live-logs" aria-live="polite">
                 <div class="log-entry">
@@ -1978,7 +2077,7 @@
 
         <!-- System Settings (v2.6) -->
         <div class="section-title">
-            <span>⚙️ System Settings</span>
+            <span data-i18n="title.settings">⚙️ System Settings</span>
             <span class="toolbar">
                 <span class="last-updated" id="settings-updated"></span>
                 <button class="btn btn-ghost" id="settings-refresh-btn" title="Muat ulang settings runtime (S)">🔄 Reload</button>
@@ -1996,8 +2095,9 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.6 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.7 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
             <div class="kbd-hints" aria-hidden="true">
+                <span><span class="kbd">Ctrl K</span> commands</span>
                 <span><span class="kbd">R</span> refresh</span>
                 <span><span class="kbd">T</span> theme</span>
                 <span><span class="kbd">A</span> auto-refresh</span>
@@ -2005,6 +2105,7 @@
                 <span><span class="kbd">M</span> maintenance</span>
                 <span><span class="kbd">S</span> settings</span>
                 <span><span class="kbd">N</span> browser notif</span>
+                <span><span class="kbd">L</span> language</span>
                 <span><span class="kbd">Esc</span> close detail</span>
                 <span>click pulse card → detail</span>
             </div>
@@ -2074,6 +2175,42 @@
                         </table>
                     </div>
                 </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules Import Modal (v2.7) -->
+    <div class="modal-backdrop" id="import-modal" hidden role="dialog" aria-modal="true" aria-labelledby="import-title">
+        <div class="modal modal-sm">
+            <div class="modal-header">
+                <div>
+                    <span class="modal-symbol" id="import-title" data-i18n="import.title">⬆️ Import Alert Rules</span>
+                    <div class="modal-sub" data-i18n="import.sub">Paste exported JSON below, or pick a .json file</div>
+                </div>
+                <button class="modal-close" id="import-close" aria-label="Close import modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="import-file-row">
+                    <input type="file" id="import-file" accept=".json,application/json" aria-label="Pick rules JSON file" />
+                </div>
+                <textarea class="import-textarea" id="import-textarea" rows="10" spellcheck="false" placeholder='{"kind":"zcapital.alert_rules","rules":[{"name":"extreme_volume_spike","threshold":500}]}'></textarea>
+                <div class="import-actions">
+                    <span class="import-status" id="import-status">Format: full export object, bare array, or {rules:[…]}</span>
+                    <button class="btn" id="import-submit-btn" data-i18n="import.run">📥 Import Rules</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Command Palette (v2.7) -->
+    <div class="modal-backdrop palette-backdrop" id="palette-backdrop" hidden role="dialog" aria-modal="true" aria-label="Command palette">
+        <div class="palette">
+            <input class="palette-input" id="palette-input" type="text" placeholder="Type a command… refresh / theme / export / filter…" autocomplete="off" spellcheck="false" aria-label="Search commands" />
+            <div class="palette-list" id="palette-list" role="listbox" aria-label="Command list"></div>
+            <div class="palette-foot">
+                <span><span class="kbd">↑↓</span> navigate</span>
+                <span><span class="kbd">Enter</span> run</span>
+                <span><span class="kbd">Esc</span> close</span>
             </div>
         </div>
     </div>
@@ -2349,6 +2486,9 @@
                 const data = await response.json();
                 if (data.status !== 'success') return;
                 const summary = data.data || [];
+
+                // v2.7: simpan daftar symbol untuk command palette
+                paletteSymbols = summary.map(s => s.symbol).slice(0, 8);
 
                 // 1. Isi dropdown filter (pertahankan pilihan user)
                 const select = document.getElementById('symbol-filter');
@@ -2705,13 +2845,49 @@
         }
 
         // ===== v2.3: Alert rules =====
+        // v2.7: sparkline audit per-rule (jumlah alert/jam, window 24h)
+        function renderRuleAudit(st) {
+            if (!st) return `<span class="rule-spark-meta never">no fire data (24h)</span>`;
+            const buckets = st.buckets || [];
+            const maxC = Math.max(1, ...buckets.map(b => b.count || 0));
+            const W = 122, Hh = 26;
+            const n = Math.max(1, buckets.length);
+            const bw = Math.max(2, Math.floor(W / n) - 1);
+            let bars = '';
+            buckets.forEach((b, i) => {
+                const c = b.count || 0;
+                if (c === 0) return;
+                const h = Math.max(2, Math.round((c / maxC) * (Hh - 4)));
+                const x = i * (bw + 1);
+                const y = Hh - h;
+                const op = (0.35 + 0.65 * (c / maxC)).toFixed(2);
+                bars += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="1.5" fill="var(--accent)" fill-opacity="${op}"><title>${c} alert(s) at ${escapeHtml(String(b.hour || '').slice(11, 16))} UTC</title></rect>`;
+            });
+            const lastRel = st.last_fired ? relativeTime(st.last_fired) : 'never';
+            const meta = `<span class="rule-spark-meta"><strong>${st.total}</strong> fires/24h &bull; last: ${lastRel}</span>`;
+            if (!bars) return `<svg class="rule-spark" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="No alerts in last 24h"><text x="3" y="16" font-size="9" fill="var(--muted)">no fires in 24h</text></svg>${meta}`;
+            return `<svg class="rule-spark" width="${W}" height="${Hh}" viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Alert frequency last 24h">${bars}</svg>${meta}`;
+        }
+
         async function loadAlertRules() {
             const list = document.getElementById('rules-list');
             try {
-                const res = await fetch(`${API_BASE}/api/alerts/rules`);
+                // v2.7: rules + statistik fire per-rule dimuat paralel
+                const [res, statsRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/alerts/rules`),
+                    fetch(`${API_BASE}/api/alerts/rule-stats?hours=24`).catch(() => null),
+                ]);
                 const data = await res.json();
                 if (data.status !== 'success') throw new Error(data.message || 'Failed to load rules');
                 const rules = data.data || [];
+
+                const statsMap = {};
+                if (statsRes && statsRes.ok) {
+                    try {
+                        const sd = await statsRes.json();
+                        if (sd.status === 'success') (sd.data || []).forEach(st => { statsMap[st.rule] = st; });
+                    } catch (e) { /* statistik gagal: rules tetap tampil */ }
+                }
 
                 if (!rules.length) {
                     list.innerHTML = '<p style="color: var(--muted); font-size: 0.85rem;">No alert rules configured.</p>';
@@ -2730,6 +2906,7 @@
                         : `<span class="rule-key">fixed</span>`;
                     const thresholdLabel = rule.threshold_key
                         ? `<span class="rule-key">${escapeHtml(rule.threshold_key)} &gt; threshold</span>` : '';
+                    const auditHtml = renderRuleAudit(statsMap[rule.name]);
 
                     row.innerHTML = `
                         <div class="rule-info">
@@ -2738,6 +2915,7 @@
                             <span class="rule-desc">${escapeHtml(rule.description || '')}</span>
                             <span>${channels}</span>
                         </div>
+                        <div class="rule-audit">${auditHtml}</div>
                         <div class="rule-threshold">${thresholdLabel}${thresholdInput}</div>
                     `;
                     list.appendChild(row);
@@ -3625,6 +3803,8 @@
                 toast('Runtime settings reloaded', 'info');
             } else if (k === 'n') {
                 toggleBrowserNotif();
+            } else if (k === 'l') {
+                toggleLang();
             }
         });
 
@@ -3738,9 +3918,255 @@
             toast('Heat map CSV downloaded', 'success');
         });
 
+
+        // ===== v2.7: Import/Export rules JSON =====
+        const importModal = document.getElementById('import-modal');
+        function openImportModal() {
+            importModal.hidden = false;
+            requestAnimationFrame(() => importModal.classList.add('open'));
+            setTimeout(() => document.getElementById('import-textarea').focus(), 80);
+        }
+        function closeImportModal() {
+            importModal.classList.remove('open');
+            setTimeout(() => { importModal.hidden = true; }, 220);
+        }
+        document.getElementById('import-close').addEventListener('click', closeImportModal);
+        importModal.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeImportModal();
+        });
+        document.getElementById('import-file').addEventListener('change', (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                document.getElementById('import-textarea').value = String(reader.result || '');
+                toast(`File loaded: ${f.name}`, 'info');
+            };
+            reader.readAsText(f);
+        });
+
+        async function submitRulesImport() {
+            const ta = document.getElementById('import-textarea');
+            const status = document.getElementById('import-status');
+            status.className = 'import-status';
+            let parsed;
+            try {
+                parsed = JSON.parse(ta.value);
+            } catch (err) {
+                status.textContent = `\u274c Invalid JSON: ${err.message}`;
+                status.classList.add('err');
+                toast('Import failed: invalid JSON', 'error');
+                return;
+            }
+            let items = Array.isArray(parsed)
+                ? parsed
+                : (parsed && Array.isArray(parsed.rules) ? parsed.rules : null);
+            if (!items || !items.length) {
+                status.textContent = '\u274c No rules list found (need {rules:[\u2026]} or [\u2026])';
+                status.classList.add('err');
+                return;
+            }
+            const cleaned = items
+                .map(r => ({ name: String((r && r.name) || '').trim(), threshold: Number(r && r.threshold) }))
+                .filter(r => r.name);
+            if (!cleaned.length) {
+                status.textContent = '\u274c No valid items (each needs name + threshold)';
+                status.classList.add('err');
+                return;
+            }
+            const btn = document.getElementById('import-submit-btn');
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_BASE}/api/alerts/rules/import`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rules: cleaned }),
+                });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message || 'Import failed');
+                const updated = data.updated || 0;
+                const skipped = (data.results || []).filter(r => r.status !== 'updated').length;
+                status.textContent = `\u2705 ${updated} updated, ${skipped} skipped`;
+                status.classList.add('ok');
+                toast(`Rules import: ${updated} updated, ${skipped} skipped`, updated ? 'success' : 'warn');
+                addLog(`Alert rules import: ${updated} updated / ${skipped} skipped`, 'info');
+                loadAlertRules();
+            } catch (err) {
+                console.error('Rules import error:', err);
+                status.textContent = `\u274c ${err.message}`;
+                status.classList.add('err');
+                toast(`Import failed: ${err.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        document.getElementById('import-submit-btn').addEventListener('click', submitRulesImport);
+        document.getElementById('rules-export-btn').addEventListener('click', () => {
+            window.location.href = `${API_BASE}/api/alerts/rules/export`;
+            addLog('Alert rules exported (JSON backup)');
+            toast('Rules JSON downloaded', 'success');
+        });
+        document.getElementById('rules-import-btn').addEventListener('click', openImportModal);
+
+        // ===== v2.7: Command palette (Ctrl+K) =====
+        const paletteBackdrop = document.getElementById('palette-backdrop');
+        const paletteInput = document.getElementById('palette-input');
+        const paletteList = document.getElementById('palette-list');
+        let paletteOpen = false;
+        let paletteActive = 0;
+        let paletteItems = [];
+        let paletteSymbols = []; // diisi fetchSymbols untuk aksi filter cepat
+
+        function paletteActions() {
+            const actions = [
+                { icon: '\ud83d\udd04', label: 'Refresh all dashboard data', hint: 'R', fn: () => { refreshAll(); toast('Dashboard data refreshed', 'success'); } },
+                { icon: '\u2600\ufe0f', label: 'Toggle light/dark theme', hint: 'T', fn: toggleTheme },
+                { icon: '\u23f1\ufe0f', label: 'Toggle auto-refresh', hint: 'A', fn: () => { setAutoRefresh(!autoRefresh); toast(`Auto-refresh ${autoRefresh ? 'enabled' : 'disabled'}`, 'info'); } },
+                { icon: '\ud83d\udd14', label: 'Reload alert rules + audit', fn: loadAlertRules },
+                { icon: '\ud83d\udea8', label: 'Refresh alert history', hint: 'H', fn: () => { loadAlertHistory(); toast('Alert history refreshed', 'info'); } },
+                { icon: '\ud83e\uddf9', label: 'Refresh maintenance panels', hint: 'M', fn: () => { loadHeatmap(); loadRetention(); loadTelegramStatus(); toast('Maintenance panels refreshed', 'info'); } },
+                { icon: '\u2699\ufe0f', label: 'Reload runtime settings', hint: 'S', fn: () => { loadSettings(); toast('Runtime settings reloaded', 'info'); } },
+                { icon: '\ud83d\udce8', label: 'Send Telegram test message', fn: sendTelegramTest },
+                { icon: '\ud83d\udda5\ufe0f', label: 'Toggle browser notifications', hint: 'N', fn: toggleBrowserNotif },
+                { icon: '\ud83d\udcc4', label: 'Export signals CSV', fn: () => { window.location.href = `${API_BASE}/api/export/signals.csv`; toast('Signals CSV downloaded', 'success'); } },
+                { icon: '\ud83d\dd25', label: 'Export heat map CSV', fn: () => { window.location.href = `${API_BASE}/api/alerts/heatmap.csv?hours=${heatmapHours}`; toast('Heat map CSV downloaded', 'success'); } },
+                { icon: '\ud83d\udccb', label: 'Export alert rules JSON', fn: () => { window.location.href = `${API_BASE}/api/alerts/rules/export`; toast('Rules JSON downloaded', 'success'); } },
+                { icon: '\u2b06\ufe0f', label: 'Import alert rules JSON', fn: openImportModal },
+                { icon: '\ud83d\udee1\ufe0f', label: 'Run security audit', fn: runSecurityAudit },
+                { icon: '\ud83c\udf10', label: 'Toggle language ID/EN', hint: 'L', fn: toggleLang },
+            ];
+            paletteSymbols.forEach(sym => {
+                actions.push({
+                    icon: '\ud83d\udcc9',
+                    label: `Filter anomalies: ${sym}`,
+                    fn: () => {
+                        const f = document.getElementById('symbol-filter');
+                        f.value = sym;
+                        fetchAnomalies();
+                        addLog(`Filtering anomalies: ${sym}`);
+                        toast(`Filtering anomalies: ${sym}`, 'info');
+                    },
+                });
+            });
+            return actions;
+        }
+
+        function openPalette() {
+            paletteBackdrop.hidden = false;
+            paletteOpen = true;
+            paletteInput.value = '';
+            renderPalette('');
+            requestAnimationFrame(() => paletteBackdrop.classList.add('open'));
+            setTimeout(() => paletteInput.focus(), 60);
+        }
+        function closePalette() {
+            paletteOpen = false;
+            paletteBackdrop.classList.remove('open');
+            setTimeout(() => { paletteBackdrop.hidden = true; }, 200);
+        }
+        function renderPalette(query) {
+            const q = String(query || '').trim().toLowerCase();
+            paletteItems = paletteActions().filter(a => !q || a.label.toLowerCase().includes(q));
+            paletteActive = 0;
+            if (!paletteItems.length) {
+                paletteList.innerHTML = '<div class="palette-empty">No matching command</div>';
+                return;
+            }
+            paletteList.innerHTML = paletteItems.map((a, i) => `
+                <div class="palette-item${i === 0 ? ' active' : ''}" data-idx="${i}" role="option" aria-selected="${i === 0}">
+                    <span class="p-icon">${a.icon}</span><span>${escapeHtml(a.label)}</span>
+                    ${a.hint ? `<span class="p-hint"><span class="kbd">${a.hint}</span></span>` : ''}
+                </div>`).join('');
+            paletteList.querySelectorAll('.palette-item').forEach(el => {
+                el.addEventListener('click', () => runPaletteItem(Number(el.dataset.idx)));
+            });
+        }
+        function runPaletteItem(idx) {
+            const item = paletteItems[idx];
+            if (!item) return;
+            closePalette();
+            setTimeout(() => {
+                try { item.fn(); } catch (e) { console.error('Palette action error:', e); }
+            }, 130);
+        }
+        paletteInput.addEventListener('input', () => renderPalette(paletteInput.value));
+        paletteInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (!paletteItems.length) return;
+                const delta = e.key === 'ArrowDown' ? 1 : -1;
+                paletteActive = (paletteActive + delta + paletteItems.length) % paletteItems.length;
+                paletteList.querySelectorAll('.palette-item').forEach((el, i) => {
+                    el.classList.toggle('active', i === paletteActive);
+                    el.setAttribute('aria-selected', i === paletteActive ? 'true' : 'false');
+                });
+                const act = paletteList.querySelector('.palette-item.active');
+                if (act) act.scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                runPaletteItem(paletteActive);
+            }
+        });
+        paletteBackdrop.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closePalette();
+        });
+        document.getElementById('palette-btn').addEventListener('click', openPalette);
+
+        // ===== v2.7: i18n ID/EN =====
+        const LANG_KEY = 'oracle-lang';
+        let lang = localStorage.getItem(LANG_KEY) || 'en';
+        const I18N = {
+            'title.pulse':    { en: '\ud83d\udcc8 Market Pulse', id: '\ud83d\udcc8 Denyut Pasar' },
+            'title.signals':  { en: '\ud83d\udd14 Recent Signals', id: '\ud83d\udd14 Sinyal Terbaru' },
+            'title.anomalies':{ en: '\ud83d\udcc9 Recent Volume Anomalies', id: '\ud83d\udcc9 Anomali Volume Terkini' },
+            'title.rules':    { en: '\ud83d\udd14 Alert Rules', id: '\ud83d\udd14 Aturan Alert' },
+            'title.notif':    { en: '\ud83d\udce8 Notification Settings', id: '\ud83d\udce8 Pengaturan Notifikasi' },
+            'title.history':  { en: '\ud83d\udea8 Alert History', id: '\ud83d\udea8 Riwayat Alert' },
+            'title.heatmap':  { en: '\ud83d\dd25 Alert Heat Map', id: '\ud83d\dd25 Peta Panas Alert' },
+            'title.retention':{ en: '\ud83e\uddf9 Data Retention', id: '\ud83e\uddf9 Retensi Data' },
+            'title.settings': { en: '\u2699\ufe0f System Settings', id: '\u2699\ufe0f Pengaturan Sistem' },
+            'title.audit':    { en: '\ud83d\udee1\ufe0f Security Audit', id: '\ud83d\udee1\ufe0f Audit Keamanan' },
+            'title.logs':     { en: '\ud83d\udcdd Live System Logs', id: '\ud83d\udcdd Log Sistem Langsung' },
+            'rules.hint':     { en: 'Set notification trigger thresholds. Changes apply instantly to the alert engine.', id: 'Atur ambang pemicu notifikasi. Perubahan berlaku langsung pada engine alert.' },
+            'import.title':   { en: '\u2b06\ufe0f Import Alert Rules', id: '\u2b06\ufe0f Impor Aturan Alert' },
+            'import.sub':     { en: 'Paste exported JSON below, or pick a .json file', id: 'Tempel JSON export di bawah, atau pilih file .json' },
+            'import.run':     { en: '\ud83d\udce5 Import Rules', id: '\ud83d\udce5 Impor Rules' },
+        };
+        function applyI18n() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const entry = I18N[el.getAttribute('data-i18n')];
+                if (entry && entry[lang]) el.textContent = entry[lang];
+            });
+            const btn = document.getElementById('lang-btn');
+            if (btn) btn.textContent = lang === 'en' ? '\ud83c\udf10 EN' : '\ud83c\udf10 ID';
+            document.title = lang === 'en' ? 'Crypto Oracle AI - Dashboard' : 'Crypto Oracle AI - Dasbor';
+        }
+        function toggleLang() {
+            lang = lang === 'en' ? 'id' : 'en';
+            localStorage.setItem(LANG_KEY, lang);
+            applyI18n();
+            toast(lang === 'id' ? 'Bahasa: Indonesia' : 'Language: English', 'info');
+            addLog(lang === 'id' ? 'Bahasa diubah: Indonesia' : 'Language switched: English');
+        }
+        document.getElementById('lang-btn').addEventListener('click', toggleLang);
+
+        // v2.7: shortcut global tambahan (Ctrl/Cmd+K palette, Esc modal baru, L bahasa)
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') {
+                e.preventDefault();
+                if (paletteOpen) closePalette(); else openPalette();
+                return;
+            }
+            if (e.key === 'Escape') {
+                if (paletteOpen) { e.preventDefault(); closePalette(); return; }
+                if (!importModal.hidden) { e.preventDefault(); closeImportModal(); return; }
+            }
+        });
+
         // ===== Init =====
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
+            applyI18n(); // v2.7
             wireSorting('signals-table', renderSignals);
             wireSorting('anomalies-table', renderAnomalies);
             connectWebSocket();

@@ -375,7 +375,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crypto Oracle AI",
     description="Decentralized Pump/Dump Detection System",
-    version="2.6.0",
+    version="2.7.0",
     lifespan=lifespan
 )
 
@@ -403,7 +403,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "name": "Crypto Oracle AI",
-        "version": "2.6.0",
+        "version": "2.7.0",
         "description": "Decentralized Pump/Dump Detection System with Enterprise Security",
         "endpoints": {
             "/health": "Health check endpoint",

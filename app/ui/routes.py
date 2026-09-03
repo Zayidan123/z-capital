@@ -13,7 +13,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -131,6 +131,21 @@ def record_prune_result(at_iso: str, rows_deleted: int) -> None:
 class RuleUpdateRequest(BaseModel):
     """Body PUT /api/alerts/rules/{name}"""
     threshold: float = Field(ge=0, description="Nilai threshold baru (>= 0)")
+
+
+class RuleImportItem(BaseModel):
+    """Satu rule dalam body POST /api/alerts/rules/import (v2.7).
+
+    Threshold divalidasi per-item (bukan 422 level batch) agar satu nilai
+    jelek tidak menggagalkan import 10 rule lain.
+    """
+    name: str = Field(min_length=1, max_length=100)
+    threshold: float
+
+
+class RuleImportRequest(BaseModel):
+    """Body POST /api/alerts/rules/import (v2.7)"""
+    rules: List[RuleImportItem] = Field(min_length=1, max_length=100)
 
 
 class BacktestRequest(BaseModel):
@@ -440,6 +455,160 @@ async def update_alert_rule(name: str, body: RuleUpdateRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/alerts/rules/export", dependencies=API_DEPS)
+async def export_alert_rules():
+    """Export konfigurasi alert rules sebagai file JSON (v2.7).
+
+    Response berupa attachment JSON (Content-Disposition) sehingga bisa
+    langsung diunduh dari dashboard dan di-import ulang lewat
+    POST /api/alerts/rules/import (mis. untuk backup/migrasi antar instans).
+    """
+    try:
+        alert_system = await get_alert_system_async()
+        rules = alert_system.get_rules()
+        payload = {
+            "kind": "zcapital.alert_rules",
+            "version": "2.7",
+            "exported_at": _utc_now_iso(),
+            "count": len(rules),
+            "rules": rules,
+        }
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        return StreamingResponse(
+            io.StringIO(json.dumps(payload, indent=2, default=str)),
+            media_type="application/json",
+            headers={
+                "Content-Disposition":
+                    f'attachment; filename="alert_rules_{stamp}.json"',
+            },
+        )
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/api/alerts/rules/import", dependencies=API_DEPS)
+async def import_alert_rules(body: RuleImportRequest):
+    """Bulk import threshold alert rules dari JSON export (v2.7).
+
+    Perilaku per-item (batch tetap sukses walau ada item bermasalah):
+    - rule editable  -> threshold di-update + persist best-effort
+    - rule unknown   -> status "unknown" (dilaporkan, bukan 404)
+    - non-editable   -> status "not_editable"
+    - threshold < 0 / non-finite -> status "invalid_threshold"
+    """
+    try:
+        alert_system = await get_alert_system_async()
+        results: List[Dict[str, Any]] = []
+        updated = 0
+        for item in body.rules:
+            name = item.name.strip()
+            if not name:
+                results.append({"name": item.name, "status": "invalid_threshold"})
+                continue
+            if item.threshold != item.threshold or item.threshold in (
+                float("inf"), float("-inf")
+            ) or item.threshold < 0:
+                results.append({"name": name, "status": "invalid_threshold"})
+                continue
+            try:
+                rule = alert_system.set_rule_threshold(name, item.threshold)
+            except KeyError:
+                results.append({"name": name, "status": "unknown"})
+                continue
+            except ValueError:
+                results.append({"name": name, "status": "not_editable"})
+                continue
+            persisted = await alert_system.persist_rule_threshold(
+                name, item.threshold
+            )
+            updated += 1
+            results.append({
+                "name": name,
+                "status": "updated",
+                "threshold": rule["threshold"],
+                "persisted": persisted,
+            })
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "received": len(body.rules),
+            "updated": updated,
+            "results": results,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.get("/api/alerts/rule-stats", dependencies=API_DEPS)
+async def get_alert_rule_stats(hours: int = 24):
+    """Agregasi alert per-rule per-jam untuk audit sparkline (v2.7).
+
+    Slot jam kosong diisi count 0 sehingga frontend bisa langsung
+    menggambar bar chart tanpa interpolasi. Window dibatasi 1..168 jam
+    (sparkline tidak butuh window setahun).
+    """
+    try:
+        hours_f = max(1, min(int(hours), 168))
+        rows = await app_database.db.get_alert_rule_stats(hours=hours_f)
+
+        now_hour = datetime.now(timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        )
+        per_rule: Dict[str, Dict[str, Any]] = {}
+        for row in rows:
+            name = str(row.get("rule", ""))
+            if not name:
+                continue
+            entry = per_rule.setdefault(
+                name, {"rule": name, "total": 0, "last_fired": None,
+                       "_sparse": {}}
+            )
+            count = int(row.get("count", 0) or 0)
+            hour = row.get("hour")
+            # Key epoch-detik agar robust terhadap perbedaan repr tz
+            key = int(hour.timestamp()) if hasattr(hour, "timestamp") else None
+            if key is None:
+                continue
+            entry["_sparse"][key] = entry["_sparse"].get(key, 0) + count
+            entry["total"] += count
+
+        data: List[Dict[str, Any]] = []
+        for name, entry in per_rule.items():
+            buckets = []
+            last_ts = None
+            for i in range(hours_f - 1, -1, -1):
+                slot_dt = now_hour - timedelta(hours=i)
+                key = int(slot_dt.timestamp())
+                count = entry["_sparse"].get(key, 0)
+                buckets.append({
+                    "hour": slot_dt.isoformat(),
+                    "count": count,
+                })
+                if count > 0:
+                    last_ts = key
+            data.append({
+                "rule": name,
+                "total": entry["total"],
+                "last_fired": (
+                    datetime.fromtimestamp(last_ts, tz=timezone.utc).isoformat()
+                    if last_ts is not None else None
+                ),
+                "buckets": buckets,
+            })
+        data.sort(key=lambda x: (-x["total"], x["rule"]))
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "window_hours": hours_f,
+            "count": len(data),
+            "data": data,
+        }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

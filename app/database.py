@@ -483,6 +483,42 @@ class Database:
             )
             return [dict(row) for row in rows]
 
+    async def get_alert_rule_stats(self, hours: int = 24) -> List[Dict[str, Any]]:
+        """Agregasi alert per-rule per-jam untuk audit sparkline rules panel (v2.7).
+
+        Mirip get_alert_heatmap tetapi dikelompokkan berdasarkan `rule`
+        alih-alih `symbol`. Hasil bersifat sparse (hanya jam yang punya
+        alert); endpoint yang memakai method ini yang mengisi slot jam
+        kosong dengan count 0 agar mudah digambar frontend.
+
+        Args:
+            hours: jendela waktu berapa jam ke belakang.
+
+        Returns:
+            List baris {rule, hour, count, max_priority} terurut per rule
+            lalu per jam.
+        """
+        window = max(1, min(int(hours), 720))
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    rule,
+                    date_trunc('hour', timestamp) AS hour,
+                    COUNT(*)::int AS count,
+                    MAX(CASE priority
+                        WHEN 'HIGH' THEN 2
+                        WHEN 'MEDIUM' THEN 1
+                        ELSE 0 END)::int AS severity
+                FROM alert_history
+                WHERE timestamp > NOW() - make_interval(hours => $1)
+                GROUP BY rule, date_trunc('hour', timestamp)
+                ORDER BY rule ASC, hour ASC
+                """,
+                window,
+            )
+            return [dict(row) for row in rows]
+
     async def get_alert_history_stats(self) -> Dict[str, Any]:
         """Statistik tabel alert_history untuk panel retensi dashboard."""
         async with self.get_connection() as conn:

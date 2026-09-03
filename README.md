@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.6
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.7
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-239%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-266%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -73,7 +73,7 @@ z-capital/
 │   ├── notifier.py       # Telegram bot notifications
 │   ├── logging_config.py # Structured logging (JSON + console)
 │   └── main.py           # Orchestrator + FastAPI app
-├── tests/                # Test suite lengkap (239 tests, semua mock - tanpa DB/network)
+├── tests/                # Test suite lengkap (266 tests, semua mock - tanpa DB/network)
 ├── scripts/deploy.sh     # Deployment helper
 ├── Dockerfile            # Multi-stage build, non-root user, healthcheck
 ├── docker-compose.yml    # PostgreSQL + Redis (optional) + App
@@ -188,6 +188,9 @@ docker compose logs -f app
 | `/dashboard/api/symbol/{symbol}` | GET | Detail lengkap satu symbol: agregat + riwayat harga + anomali (`?history_points=10..500`) |
 | `/dashboard/api/alerts/rules` | GET | Daftar alert rules (metadata + threshold, otomatis menerapkan threshold tersimpan DB) |
 | `/dashboard/api/alerts/rules/{name}` | PUT | Ubah threshold rule editable + persist ke DB (body `{"threshold": number}`, response flag `persisted`) |
+| `/dashboard/api/alerts/rule-stats` | GET | **v2.7** Agregasi alert per-rule per-jam untuk audit sparkline (`?hours=1..168`; slot jam kosong diisi 0, `total` + `last_fired` per rule) |
+| `/dashboard/api/alerts/rules/export` | GET | **v2.7** Export semua alert rules sebagai file JSON attachment (backup/migrasi antar instans) |
+| `/dashboard/api/alerts/rules/import` | POST | **v2.7** Bulk import threshold rules dari JSON export (status per-item: `updated`/`unknown`/`not_editable`/`invalid_threshold` — satu item jelek tidak menggagalkan batch) |
 | `/dashboard/api/alerts/history` | GET | Riwayat alert ter-trigger dari DB (persisten; fallback in-memory, flag `source`; **v2.6 filter `?symbol=` & `?hours=`** untuk click-to-filter, `?limit=1..200`) |
 | `/dashboard/api/alerts/heatmap` | GET | Agregasi alert per-symbol per-jam untuk heat map (`?hours=6..168`) |
 | `/dashboard/api/alerts/heatmap.csv` | GET | **v2.6** Export agregasi heat map sebagai CSV (`?hours=6..168`; kolom symbol/hour/alert_count/severity) |
@@ -242,7 +245,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 239 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, integrasi pipeline anomaly → alert → WebSocket, loop housekeeping retensi yang membaca **override runtime**, dan **regression guard selector CSS `[hidden]`**).
+**Status saat ini: 266 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier (termasuk status aman tanpa token + runtime reconfigure), AI module, security hardening, AlertSystem data-driven dengan persistensi DB, BacktestEngine dengan harga riil, rate limiter per-IP, dan seluruh endpoint FastAPI termasuk anomalies, symbols, symbol detail, alerts rules persisten, alert history + **filter symbol/hours v2.6**, heat map agregasi + **CSV export v2.6**, retensi + prune manual, **runtime settings GET/PUT v2.6** (validasi, clamp, enkripsi token, penolakan token tanpa chat id), **PWA manifest & ikon**, **rule-stats + export/import rules JSON v2.7**, integrasi pipeline anomaly → alert → WebSocket, loop housekeeping retensi yang membaca **override runtime**, dan **regression guard selector CSS atribut hidden bentuk valid (v2.7): selector `[hidden]`**).
 
 ---
 
@@ -344,6 +347,15 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
 - **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
 - **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
+
+### ✨ v2.7 — Rule Audit Sparkline, Import/Export Rules, Command Palette & i18n
+- **📊 Audit sparkline per-rule** — setiap baris di panel Alert Rules kini menampilkan mini bar chart 24 jam (endpoint `/api/alerts/rule-stats?hours=1..168`: agregasi per-rule per-jam dari `alert_history`, slot jam kosong diisi 0) + meta jumlah fire/24h + waktu fire terakhir relatif; rules tanpa data tampil "no fire data"
+- **📋 Export/Import rules JSON** — tombol JSON mengunduh seluruh konfigurasi rules (`GET /api/alerts/rules/export`, attachment ber-timestamp); modal Import menerima paste JSON atau file .json (full export object, bare array, atau `{rules:[…]}`) → `POST /api/alerts/rules/import` update + persist threshold rule editable secara bulk dengan status per-item (`updated`/`unknown`/`not_editable`/`invalid_threshold`) — satu item jelek tidak menggagalkan batch, threshold negatif/NaN/Infinity ditolak per-item, gagal persist DB tetap mengubah state in-memory dengan flag `persisted:false`
+- **⌘ Command Palette (Ctrl+K)** — overlay pencarian perintah ala editor: 15+ aksi (refresh, theme, auto-refresh, reload rules/history/settings, maintenance panels, Telegram test, browser notifications, export CSV signals/heatmap/rules JSON, import rules, security audit, toggle bahasa, filter anomali per-symbol dinamis) dengan filter substring, navigasi ↑↓ + Enter + Esc, ikon per-aksi + hint shortcut, animasi paletteIn, tombol ⌘K di header; shortcut `L` toggle bahasa
+- **🌐 i18n ID/EN** — toggle bahasa Indonesia/English untuk 13+ label statis (judul semua panel, hint rules, teks modal import) via atribut `data-i18n` + kamus `I18N`; persist di `localStorage` (`oracle-lang`), judul dokumen ikut berubah, tombol 🌐 di header + shortcut `L` + aksi palette
+- **🐛 Fix dead-code CSS korup (root-cause v2.3)** — 3 selector atribut hidden (`.error-banner`, `.modal-backdrop`, `.offline-banner`) tercatat korup sejak v2.3 (kehilangan karakter pembuka atribut) sehingga rule tidak pernah valid; guard lama justru menegaskan bentuk korup. Di browser modern tak terasa (UA rule display:none !important menutup), tetapi kini diperbaiki ke bentuk valid + guard test ditulis ulang mewajibkan bentuk valid & menolak korup
+- **🎨 Styling** — bar sparkline dengan opacity proporsional + tooltip per-bar, layout rule-row 3 kolom (info/audit/threshold) yang stack rapi di mobile, textarea mono untuk import dengan status berwarna ok/err, palette item hover + active outline, footer v2.7 dengan hint Ctrl K & L
+- **+27 test baru** — DB rule-stats (SQL GROUP BY + clamp), endpoint rule-stats (pengisian bucket, urutan, clamp 1..168, error terstruktur), export (attachment + shape tanpa lambda + refleksi threshold runtime), import (bulk sukses + persist, mixed status, NaN/Infinity raw-body, nama whitespace, 422 missing/empty/name-too-long, roundtrip export→import, persist gagal tetap update memori), guard HTML v2.7 (elemen baru, wiring data-i18n, selector valid) → total **266 tests**
 
 ### ✨ v2.6 — Runtime Settings, Click-to-Filter, Browser Notifications & PWA
 - **⚙️ Panel System Settings** — ubah konfigurasi runtime langsung dari dashboard tanpa restart: `alert_history_retention_days`, `dashboard_refresh_seconds` (interval auto-refresh berubah live), `anomaly_feed_limit` (ukuran feed anomali). Nilai tersimpan di tabel `app_settings` (survive restart), badge **override** untuk nilai ≠ default, validasi int dengan clamp + warning toast, endpoint `GET/PUT /api/settings` (terproteksi API key + rate limit)
