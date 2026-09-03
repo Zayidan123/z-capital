@@ -1,10 +1,10 @@
-# 🚀 Crypto Oracle AI - Enterprise Edition v2.0
+# 🚀 Crypto Oracle AI - Enterprise Edition v2.2
 
 ## Sistem Deteksi Dini Pump/Dump Terdesentralisasi dengan Fitur AI Lengkap
 
 Sistem monitoring crypto 24/7 yang memantau CEX (Binance), DEX, On-Chain (Etherscan), dan Berita (CryptoPanic) dengan fitur enterprise lengkap.
 
-![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-68%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production%20ready-brightgreen) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) ![Tests](https://img.shields.io/badge/tests-103%20passed-success) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -171,10 +171,14 @@ docker compose logs -f app
 | `/dashboard/` | GET | Dashboard real-time monitoring |
 | `/dashboard/api/stats` | GET | Statistik sistem & sinyal terbaru |
 | `/dashboard/api/anomalies` | GET | Daftar anomali volume terbaru (support `?limit=` & `?symbol=`) |
+| `/dashboard/api/symbols` | GET | Ringkasan per-symbol (jumlah anomali, harga terakhir, rata-rata spike) |
+| `/dashboard/api/sparkline/{symbol}` | GET | Riwayat harga kronologis untuk grafik sparkline (`?points=10..200`) |
 | `/dashboard/api/export/signals.csv` | GET | Export sinyal ke file CSV (support `?limit=`) |
 | `/dashboard/api/security/audit` | GET | Jalankan audit keamanan (dependency scan + pentest) |
 | `/dashboard/api/signals/validate/{symbol}` | GET | Validasi sinyal multi-layer untuk symbol |
 | `/dashboard/ws/updates` | WebSocket | Update real-time (anomaly, signal, stats auto-push tiap 30s) |
+
+> 🔐 **Opsi autentikasi API**: set environment variable `DASHBOARD_API_KEY` untuk mewajibkan header `X-API-Key` pada semua endpoint `/dashboard/api/*` (cocok saat dashboard diekspos ke publik). Jika tidak di-set, semua endpoint terbuka (mode lokal). Halaman HTML & WebSocket tidak terpengaruh.
 
 ---
 
@@ -203,7 +207,7 @@ pytest tests/ --cov=app --cov-report=term-missing
 pytest tests/test_streamer_volume.py -v
 ```
 
-**Status saat ini: 87 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, dan seluruh endpoint FastAPI termasuk anomalies & CSV export).
+**Status saat ini: 103 tests passing** ✅ (mencakup config, database, streamer volume tracker, analyzer, notifier, AI module, security hardening, seluruh endpoint FastAPI termasuk anomalies, symbols, sparkline, CSV export, dan opt-in API key auth).
 
 ---
 
@@ -294,6 +298,17 @@ Repositori ini telah melalui audit menyeluruh. Berikut ringkasan perbaikan:
 - **Auto-refresh toggle + tombol refresh manual**
 - **Stats auto-push via WebSocket** tiap 30 detik dari server (semua client sinkron tanpa polling)
 - **Styling overhaul**: connection badge dinamis (LIVE/RECONNECTING/OFFLINE), jam live WIB di header, skeleton loading shimmer, card accent per-metrik, scrollbar custom, favicon, mobile responsive penuh, dukungan `prefers-reduced-motion`
+
+### ✨ v2.2 — Market Pulse, Theme System & Hardening
+- **📈 Market Pulse panel** — sparkline harga SVG per-symbol (top 4 symbol paling aktif) dengan trend badge naik/turun, harga terakhir & rata-rata spike (endpoint `/api/symbols` + `/api/sparkline/{symbol}` baru)
+- **🌗 Dark/Light theme toggle** — CSS variables penuh, persist di `localStorage`, otomatis mengikuti `prefers-color-scheme`, shortcut keyboard `T`
+- **🔢 Animated counters** — angka statistik beranimasi count-up (easeOutCubic) setiap update
+- **🔔 Toast notifications** — feedback ringan untuk refresh, export, audit, anomaly & signal baru
+- **⚠️ Error banner interaktif** — muncul otomatis saat API/DB gagal dengan tombol Retry & Dismiss (tidak lagi error diam-diam di console)
+- **🎛️ Filter symbol interaktif** — dropdown untuk memfilter tabel anomali per-symbol (terisi otomatis dari `/api/symbols`)
+- **⌨️ Keyboard shortcuts** — `R` refresh, `T` theme, `A` auto-refresh (hint di footer)
+- **🔐 Opt-in API key auth** — set `DASHBOARD_API_KEY` untuk melindungi semua endpoint `/api/*` dengan header `X-API-Key` (constant-time compare); default nonaktif untuk penggunaan lokal
+- **+16 test baru** — symbols, sparkline (normalisasi uppercase & clamp points), API key auth (401/200), error terstruktur, dan method DB baru → total **103 tests**
 
 ---
 

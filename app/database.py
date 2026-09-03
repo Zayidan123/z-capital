@@ -239,6 +239,52 @@ class Database:
                 )
             return [dict(row) for row in rows]
     
+    async def get_price_history(
+        self,
+        symbol: str,
+        limit: int = 60
+    ) -> List[Dict[str, Any]]:
+        """Get chronological price history for one symbol (oldest first).
+
+        Dipakai endpoint sparkline: hasilnya di-reverse agar grafik
+        bergerak dari kiri (lama) ke kanan (baru).
+        """
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT price, volume_spike, timestamp
+                FROM anomali_logs
+                WHERE symbol = $1
+                ORDER BY timestamp DESC
+                LIMIT $2
+                """,
+                symbol, limit
+            )
+            # DESC di SQL → reverse menjadi ascending (lama → baru)
+            return [dict(row) for row in reversed(rows)]
+
+    async def get_symbol_summary(self) -> List[Dict[str, Any]]:
+        """Per-symbol aggregate untuk Market Pulse & filter dropdown.
+
+        Mengembalikan: symbol, anomaly_count, avg_spike, last_price, last_seen,
+        diurutkan dari symbol paling aktif.
+        """
+        async with self.get_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    symbol,
+                    COUNT(*)::int AS anomaly_count,
+                    AVG(volume_spike)::float AS avg_spike,
+                    (array_agg(price ORDER BY timestamp DESC))[1]::float AS last_price,
+                    MAX(timestamp) AS last_seen
+                FROM anomali_logs
+                GROUP BY symbol
+                ORDER BY anomaly_count DESC, symbol ASC
+                """
+            )
+            return [dict(row) for row in rows]
+
     async def get_recent_signals(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent signals from the database"""
         async with self.get_connection() as conn:

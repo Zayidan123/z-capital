@@ -95,6 +95,15 @@ class Settings(BaseSettings):
         description="Full Redis connection URL (overrides host/port)",
     )
 
+    # Dashboard Security (Optional)
+    dashboard_api_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "API key required in the X-API-Key header for dashboard API endpoints. "
+            "Leave unset (None) to disable authentication (default, for local use)."
+        ),
+    )
+
     def get_redis_url(self) -> str:
         """Build the Redis connection URL from settings"""
         if self.redis_url:

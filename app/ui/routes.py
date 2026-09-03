@@ -5,19 +5,21 @@ Real-time Dashboard UI Module
 - HTML/CSS/JS frontend
 """
 import csv
+import hmac
 import io
 import json
 import asyncio
 import time
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from app import database as app_database
+from app.config import get_settings
 from app.database import get_recent_signals, get_system_stats
 from app.security.hardening import signal_validator, penetration_tester, dependency_auditor
 
@@ -37,6 +39,27 @@ active_connections: List[WebSocket] = []
 def _utc_now_iso() -> str:
     """Current UTC timestamp as ISO-8601 string (timezone-aware)."""
     return datetime.now(timezone.utc).isoformat()
+
+
+async def require_api_key(x_api_key: Optional[str] = Header(None)) -> None:
+    """Opt-in API key auth untuk semua endpoint /api/*.
+
+    Aturan:
+    - Jika settings.dashboard_api_key TIDAK di-set (None) -> auth nonaktif
+      (mode lokal/default, semua request diterima).
+    - Jika di-set -> header X-API-Key wajib ada dan cocok (401 jika tidak).
+
+    WebSocket dan halaman HTML tidak dilindungi (browser WS tidak bisa
+    mengirim custom header); proteksi berfokus pada data API.
+    """
+    expected = get_settings().dashboard_api_key
+    if not expected:
+        return
+    if not x_api_key or not hmac.compare_digest(str(x_api_key), str(expected)):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing X-API-Key header",
+        )
 
 
 async def broadcast_update(data: Dict[str, Any]):
@@ -70,7 +93,7 @@ async def dashboard_home(request: Request):
     )
 
 
-@router.get("/api/stats")
+@router.get("/api/stats", dependencies=[Depends(require_api_key)])
 async def get_dashboard_stats():
     """API endpoint untuk statistik real-time"""
     try:
@@ -98,7 +121,7 @@ async def get_dashboard_stats():
         }
 
 
-@router.get("/api/security/audit")
+@router.get("/api/security/audit", dependencies=[Depends(require_api_key)])
 async def security_audit():
     """Jalankan audit keamanan dan tampilkan hasil"""
     try:
@@ -124,7 +147,7 @@ async def security_audit():
         }
 
 
-@router.get("/api/anomalies")
+@router.get("/api/anomalies", dependencies=[Depends(require_api_key)])
 async def get_anomalies(limit: int = 50, symbol: str = None):
     """API endpoint untuk daftar anomali volume terbaru"""
     try:
@@ -144,7 +167,7 @@ async def get_anomalies(limit: int = 50, symbol: str = None):
         }
 
 
-@router.get("/api/export/signals.csv")
+@router.get("/api/export/signals.csv", dependencies=[Depends(require_api_key)])
 async def export_signals_csv(limit: int = 500):
     """Export sinyal terbaru sebagai file CSV"""
     try:
@@ -172,6 +195,52 @@ async def export_signals_csv(limit: int = 500):
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+@router.get("/api/symbols", dependencies=[Depends(require_api_key)])
+async def get_symbols():
+    """Ringkasan per-symbol (jumlah anomali, harga terakhir, rata-rata spike).
+
+    Dipakai dashboard untuk Market Pulse panel dan filter dropdown.
+    """
+    try:
+        summary = await app_database.db.get_symbol_summary()
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "count": len(summary),
+            "data": summary,
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+@router.get("/api/sparkline/{symbol}", dependencies=[Depends(require_api_key)])
+async def get_sparkline(symbol: str, points: int = 60):
+    """Riwayat harga kronologis untuk satu symbol (untuk grafik sparkline).
+
+    - symbol dinormalisasi ke uppercase (konsisten dengan Binance pair)
+    - points di-clamp 10..200 agar query tetap ringan
+    """
+    try:
+        points = max(10, min(points, 200))
+        symbol = symbol.upper().strip()
+        history = await app_database.db.get_price_history(symbol, limit=points)
+        return {
+            "status": "success",
+            "timestamp": _utc_now_iso(),
+            "symbol": symbol,
+            "count": len(history),
+            "data": history,
+        }
     except Exception as e:
         return {
             "status": "error",

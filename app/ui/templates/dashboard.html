@@ -17,7 +17,40 @@
             --muted: #8b93a7;
             --card-bg: rgba(255, 255, 255, 0.045);
             --card-border: rgba(255, 255, 255, 0.09);
+            --header-bg: rgba(255, 255, 255, 0.06);
+            --inset-bg: rgba(0, 0, 0, 0.25);
+            --log-bg: rgba(0, 0, 0, 0.32);
+            --th-bg: #151a2b;
+            --row-hover: rgba(255, 255, 255, 0.05);
+            --skeleton-a: rgba(255,255,255,0.06);
+            --skeleton-b: rgba(255,255,255,0.14);
+            --btn-text: #101528;
+            --shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+            --banner-bg: rgba(255, 82, 82, 0.12);
             --radius: 16px;
+        }
+
+        body.light {
+            --bg-1: #f2f5fb;
+            --bg-2: #e7edf8;
+            --accent: #0284a8;
+            --accent-2: #059a63;
+            --amber: #b07b00;
+            --danger: #d63a3a;
+            --text: #1d2536;
+            --muted: #5d6679;
+            --card-bg: rgba(255, 255, 255, 0.78);
+            --card-border: rgba(20, 32, 55, 0.10);
+            --header-bg: rgba(255, 255, 255, 0.72);
+            --inset-bg: rgba(20, 32, 55, 0.05);
+            --log-bg: rgba(20, 32, 55, 0.06);
+            --th-bg: #eaf0fa;
+            --row-hover: rgba(20, 32, 55, 0.045);
+            --skeleton-a: rgba(20,32,55,0.07);
+            --skeleton-b: rgba(20,32,55,0.16);
+            --btn-text: #ffffff;
+            --shadow: 0 12px 28px rgba(30, 45, 80, 0.14);
+            --banner-bg: rgba(214, 58, 58, 0.10);
         }
 
         * {
@@ -27,6 +60,7 @@
         }
 
         html { scrollbar-color: #2c3550 transparent; }
+        body.light { scrollbar-color: #b9c4dc transparent; }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -37,6 +71,7 @@
             display: flex;
             flex-direction: column;
             line-height: 1.5;
+            transition: background 0.35s ease, color 0.35s ease;
         }
 
         .container {
@@ -47,9 +82,63 @@
             flex: 1;
         }
 
+        /* ===== Error banner ===== */
+        .error-banner {
+            position: sticky;
+            top: 10px;
+            z-index: 60;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--banner-bg);
+            border: 1px solid var(--danger);
+            color: var(--text);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 18px;
+            font-size: 0.9rem;
+            animation: slideDown 0.3s ease;
+        }
+
+        .error-banner[hidden] { display: none; }
+
+        .error-banner .banner-icon { font-size: 1.1rem; }
+        .error-banner strong { color: var(--danger); }
+        .error-banner .banner-msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+
+        .error-banner .btn-retry {
+            background: var(--danger);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: filter 0.2s ease, transform 0.2s ease;
+            flex-shrink: 0;
+        }
+        .error-banner .btn-retry:hover { filter: brightness(1.12); transform: translateY(-1px); }
+        .error-banner .btn-dismiss {
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            font-size: 1.15rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 4px 6px;
+            border-radius: 6px;
+        }
+        .error-banner .btn-dismiss:hover { color: var(--text); background: rgba(128,128,128,0.15); }
+
+        @keyframes slideDown {
+            from { transform: translateY(-12px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
         /* ===== Header ===== */
         header {
-            background: rgba(255, 255, 255, 0.06);
+            background: var(--header-bg);
             backdrop-filter: blur(12px);
             border: 1px solid var(--card-border);
             border-radius: var(--radius);
@@ -74,7 +163,7 @@
         .header-right {
             display: flex;
             align-items: center;
-            gap: 18px;
+            gap: 12px;
             flex-wrap: wrap;
         }
 
@@ -83,7 +172,7 @@
             font-size: 0.95rem;
             color: var(--muted);
             padding: 8px 14px;
-            background: rgba(0, 0, 0, 0.25);
+            background: var(--inset-bg);
             border-radius: 10px;
             border: 1px solid var(--card-border);
             white-space: nowrap;
@@ -96,7 +185,7 @@
             align-items: center;
             gap: 10px;
             padding: 8px 16px;
-            background: rgba(0, 0, 0, 0.25);
+            background: var(--inset-bg);
             border-radius: 10px;
             border: 1px solid var(--card-border);
             font-size: 0.9rem;
@@ -124,6 +213,22 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.35; }
         }
+
+        .theme-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            border: 1px solid var(--card-border);
+            background: var(--inset-bg);
+            cursor: pointer;
+            font-size: 1.15rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+        }
+        .theme-btn:hover { transform: rotate(15deg) scale(1.06); border-color: var(--accent); }
+        .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
         /* ===== Stat cards ===== */
         .dashboard-grid {
@@ -160,7 +265,7 @@
         .card:hover {
             transform: translateY(-4px);
             border-color: rgba(0, 217, 255, 0.35);
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+            box-shadow: var(--shadow);
         }
 
         .card h2 {
@@ -204,7 +309,17 @@
             min-width: 90px;
             height: 2.4rem;
             border-radius: 8px;
-            background: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0.06) 75%);
+            background: linear-gradient(90deg, var(--skeleton-a) 25%, var(--skeleton-b) 50%, var(--skeleton-a) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+        }
+
+        .skeleton-sm {
+            display: block;
+            min-width: 0;
+            height: 0.85rem;
+            border-radius: 6px;
+            background: linear-gradient(90deg, var(--skeleton-a) 25%, var(--skeleton-b) 50%, var(--skeleton-a) 75%);
             background-size: 200% 100%;
             animation: shimmer 1.4s infinite;
         }
@@ -214,11 +329,117 @@
             100% { background-position: -200% 0; }
         }
 
+        /* ===== Market Pulse (sparklines) ===== */
+        .pulse-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 18px;
+            margin-top: 6px;
+        }
+
+        .pulse-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            padding: 18px 20px 14px;
+            transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pulse-card::after {
+            content: '';
+            position: absolute;
+            left: 0; bottom: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-2), transparent);
+            opacity: 0.65;
+        }
+
+        .pulse-card.trend-down::after { background: linear-gradient(90deg, var(--danger), transparent); }
+
+        .pulse-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(0, 255, 136, 0.35);
+            box-shadow: var(--shadow);
+        }
+
+        .pulse-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .pulse-symbol {
+            font-weight: 700;
+            font-size: 1.02rem;
+            letter-spacing: 0.03em;
+        }
+
+        .pulse-trend {
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pulse-trend.up { color: var(--accent-2); background: rgba(0, 255, 136, 0.13); }
+        .pulse-trend.down { color: var(--danger); background: rgba(255, 82, 82, 0.13); }
+
+        .spark {
+            width: 100%;
+            height: 72px;
+            display: block;
+        }
+
+        .spark-line {
+            fill: none;
+            stroke: var(--accent-2);
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .spark-area { fill: url(#sparkFillUp); stroke: none; }
+        .trend-down .spark-line { stroke: var(--danger); }
+        .trend-down .spark-area { fill: url(#sparkFillDown); }
+
+        .spark-dot {
+            r: 3.2;
+            fill: var(--accent-2);
+            stroke: var(--card-bg);
+            stroke-width: 1.5;
+        }
+        .trend-down .spark-dot { fill: var(--danger); }
+
+        .pulse-foot {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .pulse-price {
+            font-weight: 700;
+            font-size: 1.1rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pulse-meta {
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+
         /* ===== Section titles & toolbar ===== */
         .section-title {
             font-size: 1.25rem;
             margin: 30px 0 16px 0;
-            color: #fff;
+            color: var(--text);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -235,7 +456,7 @@
 
         .btn {
             background: linear-gradient(90deg, var(--accent), var(--accent-2));
-            color: #101528;
+            color: var(--btn-text);
             border: none;
             padding: 10px 20px;
             border-radius: 10px;
@@ -254,18 +475,40 @@
         .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
         .btn-ghost {
-            background: rgba(255, 255, 255, 0.07);
+            background: var(--inset-bg);
             color: var(--text);
             border: 1px solid var(--card-border);
         }
         .btn-ghost:hover { background: rgba(255, 255, 255, 0.12); box-shadow: none; border-color: rgba(0, 217, 255, 0.3); }
+        body.light .btn-ghost:hover { background: rgba(20, 32, 55, 0.08); }
+
+        .filter-select {
+            appearance: none;
+            -webkit-appearance: none;
+            background: var(--inset-bg);
+            border: 1px solid var(--card-border);
+            color: var(--text);
+            padding: 10px 36px 10px 14px;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color 0.25s ease;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238b93a7' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            max-width: 220px;
+        }
+        .filter-select:hover { border-color: rgba(0, 217, 255, 0.4); }
+        .filter-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .filter-select:disabled { opacity: 0.55; cursor: not-allowed; }
 
         .toggle-wrap {
             display: inline-flex;
             align-items: center;
             gap: 10px;
             padding: 8px 14px;
-            background: rgba(0, 0, 0, 0.25);
+            background: var(--inset-bg);
             border: 1px solid var(--card-border);
             border-radius: 10px;
             font-size: 0.85rem;
@@ -282,6 +525,7 @@
             transition: background 0.25s ease;
             flex-shrink: 0;
         }
+        body.light .toggle-switch { background: #c3cde2; }
 
         .toggle-switch::after {
             content: '';
@@ -291,6 +535,7 @@
             background: #fff;
             border-radius: 50%;
             transition: transform 0.25s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
 
         .toggle-wrap.on .toggle-switch { background: var(--accent-2); }
@@ -320,7 +565,7 @@
         .signals-table td {
             padding: 12px 14px;
             text-align: left;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+            border-bottom: 1px solid var(--card-border);
             white-space: nowrap;
         }
 
@@ -340,18 +585,18 @@
             letter-spacing: 0.06em;
             position: sticky;
             top: 0;
-            background: #151a2b;
+            background: var(--th-bg);
             z-index: 2;
             cursor: pointer;
             user-select: none;
         }
 
-        .signals-table th:hover { color: #fff; }
+        .signals-table th:hover { color: var(--text); }
         .signals-table th .sort-arrow { opacity: 0.4; margin-left: 5px; font-size: 0.7rem; }
         .signals-table th.sorted .sort-arrow { opacity: 1; color: var(--accent-2); }
 
         .signals-table tbody tr { transition: background 0.15s ease; }
-        .signals-table tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
+        .signals-table tbody tr:hover { background: var(--row-hover); }
 
         .empty-row {
             text-align: center;
@@ -374,7 +619,6 @@
 
         .spike-value {
             font-weight: 700;
-            color: var(--accent-2);
             font-variant-numeric: tabular-nums;
         }
 
@@ -395,7 +639,7 @@
         .progress-bar {
             width: 100%;
             height: 8px;
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(128, 128, 128, 0.15);
             border-radius: 4px;
             overflow: hidden;
             margin-top: 10px;
@@ -410,7 +654,7 @@
 
         /* ===== Live logs ===== */
         .log-container {
-            background: rgba(0, 0, 0, 0.32);
+            background: var(--log-bg);
             border-radius: 12px;
             padding: 14px;
             max-height: 340px;
@@ -423,22 +667,26 @@
         .table-wrap::-webkit-scrollbar { width: 9px; height: 9px; }
 
         .log-container::-webkit-scrollbar-track,
-        .table-wrap::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); border-radius: 8px; }
+        .table-wrap::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.12); border-radius: 8px; }
 
         .log-container::-webkit-scrollbar-thumb,
         .table-wrap::-webkit-scrollbar-thumb {
             background: #2c3550;
             border-radius: 8px;
         }
+        body.light .log-container::-webkit-scrollbar-thumb,
+        body.light .table-wrap::-webkit-scrollbar-thumb { background: #b9c4dc; }
 
         .log-container::-webkit-scrollbar-thumb:hover,
         .table-wrap::-webkit-scrollbar-thumb:hover { background: #3a4568; }
+        body.light .log-container::-webkit-scrollbar-thumb:hover,
+        body.light .table-wrap::-webkit-scrollbar-thumb:hover { background: #98a6c6; }
 
         .log-entry {
             margin-bottom: 7px;
             padding: 8px 10px;
             border-left: 3px solid var(--accent);
-            background: rgba(255, 255, 255, 0.04);
+            background: var(--row-hover);
             border-radius: 0 8px 8px 0;
             word-break: break-word;
         }
@@ -448,16 +696,74 @@
 
         .log-timestamp { color: var(--accent); margin-right: 10px; }
 
+        /* ===== Toast notifications ===== */
+        .toasts {
+            position: fixed;
+            bottom: 18px;
+            right: 18px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: min(340px, calc(100vw - 36px));
+        }
+
+        .toast {
+            background: var(--card-bg);
+            backdrop-filter: blur(14px);
+            border: 1px solid var(--card-border);
+            border-left: 4px solid var(--accent);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 0.88rem;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateX(24px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toast.show { opacity: 1; transform: translateX(0); }
+        .toast-success { border-left-color: var(--accent-2); }
+        .toast-error { border-left-color: var(--danger); }
+        .toast-warn { border-left-color: var(--amber); }
+
         /* ===== Footer ===== */
         footer {
             text-align: center;
             padding: 26px 20px 30px;
-            color: #5b6377;
+            color: var(--muted);
             font-size: 0.85rem;
             margin-top: auto;
         }
 
         footer .heart { color: var(--danger); }
+
+        .kbd-hints {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+            font-size: 0.78rem;
+            color: var(--muted);
+        }
+
+        .kbd {
+            display: inline-block;
+            padding: 2px 7px;
+            border: 1px solid var(--card-border);
+            border-bottom-width: 2px;
+            border-radius: 6px;
+            background: var(--inset-bg);
+            font-family: inherit;
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: var(--text);
+        }
 
         /* ===== Responsive ===== */
         @media (max-width: 640px) {
@@ -467,10 +773,12 @@
             .dashboard-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
             .card { padding: 16px; }
             .stat-value { font-size: 1.6rem; }
+            .error-banner { flex-wrap: wrap; }
         }
 
         @media (max-width: 420px) {
             .dashboard-grid { grid-template-columns: 1fr; }
+            .pulse-grid { grid-template-columns: 1fr; }
         }
 
         /* ===== Motion preference ===== */
@@ -484,7 +792,29 @@
     </style>
 </head>
 <body>
+    <!-- Shared SVG defs untuk gradient sparkline -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+            <linearGradient id="sparkFillUp" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#00ff88" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#00ff88" stop-opacity="0"/>
+            </linearGradient>
+            <linearGradient id="sparkFillDown" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ff5252" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="#ff5252" stop-opacity="0"/>
+            </linearGradient>
+        </defs>
+    </svg>
+
+    <!-- Error banner (muncul saat API gagal / DB down) -->
     <div class="container">
+        <div class="error-banner" id="error-banner" hidden role="alert">
+            <span class="banner-icon">⚠️</span>
+            <span class="banner-msg"><strong>Connection issue:</strong> <span id="error-banner-text">Unknown error</span></span>
+            <button class="btn-retry" id="banner-retry">Retry</button>
+            <button class="btn-dismiss" id="banner-dismiss" aria-label="Dismiss error">✕</button>
+        </div>
+
         <header>
             <h1>🚀 Crypto Oracle AI Dashboard</h1>
             <div class="header-right">
@@ -495,6 +825,7 @@
                     <div class="status-dot"></div>
                     <span id="status-text">LIVE</span>
                 </div>
+                <button class="theme-btn" id="theme-btn" title="Toggle theme (T)" aria-label="Toggle light/dark theme">☀️</button>
             </div>
         </header>
 
@@ -526,15 +857,27 @@
             </div>
         </div>
 
+        <!-- Market Pulse -->
+        <div class="section-title">
+            <span>📈 Market Pulse</span>
+            <span class="last-updated" id="pulse-updated"></span>
+        </div>
+        <div class="pulse-grid" id="pulse-grid">
+            <div class="pulse-card"><span class="skeleton" style="min-width:120px;height:1rem"></span><span class="skeleton" style="display:block;margin-top:14px;height:72px"></span></div>
+            <div class="pulse-card"><span class="skeleton" style="min-width:120px;height:1rem"></span><span class="skeleton" style="display:block;margin-top:14px;height:72px"></span></div>
+            <div class="pulse-card"><span class="skeleton" style="min-width:120px;height:1rem"></span><span class="skeleton" style="display:block;margin-top:14px;height:72px"></span></div>
+            <div class="pulse-card"><span class="skeleton" style="min-width:120px;height:1rem"></span><span class="skeleton" style="display:block;margin-top:14px;height:72px"></span></div>
+        </div>
+
         <!-- Recent Signals -->
         <div class="section-title">
             <span>🔔 Recent Signals</span>
             <span class="toolbar">
                 <span class="last-updated" id="signals-updated"></span>
-                <span class="toggle-wrap on" id="auto-refresh-toggle" role="switch" aria-checked="true" tabindex="0" title="Auto-refresh data setiap 30 detik">
+                <span class="toggle-wrap on" id="auto-refresh-toggle" role="switch" aria-checked="true" tabindex="0" title="Auto-refresh data setiap 30 detik (shortcut: A)">
                     <span class="toggle-switch"></span> Auto-refresh
                 </span>
-                <button class="btn btn-ghost" id="refresh-btn" title="Refresh data sekarang">🔄 Refresh</button>
+                <button class="btn btn-ghost" id="refresh-btn" title="Refresh data sekarang (shortcut: R)">🔄 Refresh</button>
                 <a class="btn" id="export-btn" href="/dashboard/api/export/signals.csv" title="Unduh sinyal sebagai CSV">⬇️ Export CSV</a>
             </span>
         </div>
@@ -560,7 +903,12 @@
         <!-- Recent Anomalies -->
         <div class="section-title">
             <span>📉 Recent Volume Anomalies</span>
-            <span class="last-updated" id="anomalies-updated"></span>
+            <span class="toolbar">
+                <select class="filter-select" id="symbol-filter" aria-label="Filter anomalies by symbol" disabled>
+                    <option value="">All symbols</option>
+                </select>
+                <span class="last-updated" id="anomalies-updated"></span>
+            </span>
         </div>
         <div class="card">
             <div class="table-wrap">
@@ -586,7 +934,7 @@
         <div class="card">
             <button class="btn" onclick="runSecurityAudit()">🛡️ Run Security Audit</button>
             <div id="audit-results" style="margin-top: 20px;">
-                <p style="color: #666;">Click button to run security scan</p>
+                <p style="color: var(--muted);">Click button to run security scan</p>
             </div>
         </div>
 
@@ -602,13 +950,22 @@
         </div>
 
         <footer>
-            <p>Crypto Oracle AI v2.1 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <p>Crypto Oracle AI v2.2 | Enterprise Edition | Dibangun dengan <span class="heart">❤</span> &copy; 2026</p>
+            <div class="kbd-hints" aria-hidden="true">
+                <span><span class="kbd">R</span> refresh</span>
+                <span><span class="kbd">T</span> theme</span>
+                <span><span class="kbd">A</span> auto-refresh</span>
+            </div>
         </footer>
     </div>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
 
     <script>
         // Semua request relatif ke prefix dashboard (router dimount di /dashboard)
         const API_BASE = '/dashboard';
+        const THEME_KEY = 'oracle-theme';
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
         // WebSocket connection for real-time updates
         let ws = null;
@@ -645,6 +1002,54 @@
             if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
             if (n >= 1_000) return (n / 1_000).toFixed(2) + 'K';
             return n.toFixed(2);
+        }
+
+        // ===== Toast notifications =====
+        function toast(message, level = 'info', title = '') {
+            const wrap = document.getElementById('toasts');
+            const el = document.createElement('div');
+            el.className = `toast toast-${level}`;
+            const icons = { info: 'ℹ️', success: '✅', error: '❌', warn: '⚠️' };
+            el.innerHTML = `<span>${icons[level] || icons.info}</span><span>${title ? '<strong>' + escapeHtml(title) + '</strong> — ' : ''}${message}</span>`;
+            wrap.appendChild(el);
+            requestAnimationFrame(() => el.classList.add('show'));
+            setTimeout(() => {
+                el.classList.remove('show');
+                setTimeout(() => el.remove(), 320);
+            }, 3600);
+        }
+
+        // ===== Error banner =====
+        function showErrorBanner(message) {
+            const banner = document.getElementById('error-banner');
+            document.getElementById('error-banner-text').textContent = message;
+            banner.hidden = false;
+        }
+
+        function hideErrorBanner() {
+            document.getElementById('error-banner').hidden = true;
+        }
+
+        // ===== Theme (dark/light) =====
+        function applyTheme(theme) {
+            document.body.classList.toggle('light', theme === 'light');
+            const btn = document.getElementById('theme-btn');
+            btn.textContent = theme === 'light' ? '🌙' : '☀️';
+            btn.title = theme === 'light' ? 'Switch to dark theme (T)' : 'Switch to light theme (T)';
+            try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode */ }
+        }
+
+        function toggleTheme() {
+            const isLight = document.body.classList.toggle('light');
+            applyTheme(isLight ? 'light' : 'dark');
+            toast(isLight ? 'Light theme enabled' : 'Dark theme enabled', 'info');
+        }
+
+        function initTheme() {
+            let saved = null;
+            try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* ignore */ }
+            const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+            applyTheme(saved || (prefersLight ? 'light' : 'dark'));
         }
 
         // ===== Jam WIB live di header =====
@@ -720,10 +1125,13 @@
             } else if (data.type === 'anomaly_detected') {
                 const a = data.data || {};
                 addLog(`🚨 Anomaly: ${escapeHtml(a.symbol)} spike +${Number(a.volume_spike || 0).toFixed(0)}%`, 'error');
+                toast(`${a.symbol} spike +${Number(a.volume_spike || 0).toFixed(0)}%`, 'error', 'Anomaly detected');
                 fetchAnomalies(); // refresh tabel anomali
+                fetchSymbols();   // refresh pulse juga
             } else if (data.type === 'signal_confirmed') {
                 const s = data.data || {};
                 addLog(`✅ Signal confirmed: ${escapeHtml(s.symbol)} (confidence ${Math.round((s.confidence || 0) * 100)}%)`, 'success');
+                toast(`${s.symbol} confirmed`, 'success', 'New signal');
                 fetchStats();
             }
         }
@@ -747,46 +1155,180 @@
             }
         }
 
+        // ===== Animated counters (count-up) =====
+        function animateValue(el, target, { decimals = 0, suffix = '', prefix = '' } = {}) {
+            const to = Number(target);
+            if (!isFinite(to)) { el.textContent = prefix + target + suffix; return; }
+            const from = Number(el.dataset.val || 0);
+            el.dataset.val = to;
+            const render = (v) => { el.textContent = prefix + v.toFixed(decimals) + suffix; };
+            if (prefersReducedMotion || from === to) { render(to); return; }
+            const duration = 650;
+            const start = performance.now();
+            function frame(now) {
+                const p = Math.min((now - start) / duration, 1);
+                const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+                render(from + (to - from) * eased);
+                if (p < 1) requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+        }
+
         // ===== Fetch data =====
         async function fetchStats() {
             try {
                 const response = await fetch(`${API_BASE}/api/stats`);
                 const data = await response.json();
                 if (data.status === 'success') {
+                    hideErrorBanner();
                     updateDashboard(data.data);
                 } else {
-                    console.error('Stats error:', data.message);
+                    showErrorBanner(data.message || 'Stats API error');
                 }
             } catch (error) {
                 console.error('Error fetching stats:', error);
+                showErrorBanner('Cannot reach the stats API. The database or service may be offline.');
             }
         }
 
         async function fetchAnomalies() {
             try {
-                const response = await fetch(`${API_BASE}/api/anomalies?limit=50`);
+                const symbolFilter = document.getElementById('symbol-filter');
+                const selected = symbolFilter.value || '';
+                const qs = new URLSearchParams({ limit: '50' });
+                if (selected) qs.set('symbol', selected);
+                const response = await fetch(`${API_BASE}/api/anomalies?${qs}`);
                 const data = await response.json();
                 if (data.status === 'success') {
+                    hideErrorBanner();
                     anomaliesData = data.data || [];
                     renderAnomalies();
                     document.getElementById('anomalies-updated').textContent =
                         `Updated ${new Date().toLocaleTimeString()}`;
+                } else {
+                    showErrorBanner(data.message || 'Anomalies API error');
                 }
             } catch (error) {
                 console.error('Error fetching anomalies:', error);
+                showErrorBanner('Cannot reach the anomalies API. The database or service may be offline.');
             }
+        }
+
+        // ===== Symbols: filter dropdown + Market Pulse =====
+        async function fetchSymbols() {
+            try {
+                const response = await fetch(`${API_BASE}/api/symbols`);
+                const data = await response.json();
+                if (data.status !== 'success') return;
+                const summary = data.data || [];
+
+                // 1. Isi dropdown filter (pertahankan pilihan user)
+                const select = document.getElementById('symbol-filter');
+                const prev = select.value;
+                select.innerHTML = '<option value="">All symbols</option>' +
+                    summary.map(s => `<option value="${escapeHtml(s.symbol)}">${escapeHtml(s.symbol)} (${s.anomaly_count})</option>`).join('');
+                if (prev && [...select.options].some(o => o.value === prev)) select.value = prev;
+                select.disabled = summary.length === 0;
+
+                // 2. Render Market Pulse (top 4 symbol paling aktif)
+                renderMarketPulse(summary.slice(0, 4));
+            } catch (error) {
+                console.error('Error fetching symbols:', error);
+            }
+        }
+
+        function buildSparkline(points, width = 260, height = 64) {
+            if (!points || points.length < 2) return null;
+            const prices = points.map(p => Number(p.price)).filter(n => isFinite(n));
+            if (prices.length < 2) return null;
+            const min = Math.min(...prices), max = Math.max(...prices);
+            const range = (max - min) || 1;
+            const stepX = width / (prices.length - 1);
+            const coords = prices.map((p, i) => [
+                (i * stepX).toFixed(2),
+                (height - 7 - ((p - min) / range) * (height - 14)).toFixed(2),
+            ]);
+            const line = coords.map(c => c.join(',')).join(' ');
+            const area = `M0,${height} L` + coords.map(c => c.join(',')).join(' L') + ` L${width},${height} Z`;
+            const last = coords[coords.length - 1];
+            const trendUp = prices[prices.length - 1] >= prices[0];
+            const changePct = ((prices[prices.length - 1] - prices[0]) / (prices[0] || 1)) * 100;
+            return { line, area, lastX: last[0], lastY: last[1], trendUp, changePct };
+        }
+
+        async function renderMarketPulse(symbols) {
+            const grid = document.getElementById('pulse-grid');
+            grid.innerHTML = '';
+
+            if (!symbols.length) {
+                grid.innerHTML = '<div class="pulse-card"><p style="color: var(--muted); font-size: 0.9rem;">No market data yet — waiting for anomalies…</p></div>';
+                return;
+            }
+
+            for (const s of symbols) {
+                const card = document.createElement('div');
+                card.className = 'pulse-card';
+                card.innerHTML = `
+                    <div class="pulse-head">
+                        <span class="pulse-symbol">${escapeHtml(s.symbol)}</span>
+                        <span class="skeleton-sm" style="width:64px"></span>
+                    </div>
+                    <div class="spark-wrap"><svg class="spark" viewBox="0 0 260 64" preserveAspectRatio="none" role="img" aria-label="Price sparkline ${escapeHtml(s.symbol)}"><polyline class="spark-line" points=""></polyline></svg></div>
+                    <div class="pulse-foot">
+                        <span class="pulse-price">${formatPrice(s.last_price)}</span>
+                        <span class="pulse-meta">${s.anomaly_count} anomalies · avg spike +${Number(s.avg_spike || 0).toFixed(0)}%</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+
+                // Ambil riwayat harga lalu gambar sparkline
+                try {
+                    const res = await fetch(`${API_BASE}/api/sparkline/${encodeURIComponent(s.symbol)}?points=40`);
+                    const data = await res.json();
+                    const placeholder = card.querySelector('.skeleton-sm');
+                    if (placeholder) placeholder.remove();
+                    const svg = card.querySelector('svg');
+
+                    if (data.status === 'success') {
+                        const spark = buildSparkline(data.data);
+
+                        if (spark) {
+                            card.classList.add(spark.trendUp ? 'trend-up' : 'trend-down');
+                            svg.innerHTML = `
+                                <path class="spark-area" d="${spark.area}"></path>
+                                <polyline class="spark-line" points="${spark.line}"></polyline>
+                                <circle class="spark-dot" cx="${spark.lastX}" cy="${spark.lastY}"></circle>
+                            `;
+                            const head = card.querySelector('.pulse-head');
+                            const badge = document.createElement('span');
+                            badge.className = `pulse-trend ${spark.trendUp ? 'up' : 'down'}`;
+                            badge.textContent = `${spark.trendUp ? '▲' : '▼'} ${spark.changePct >= 0 ? '+' : ''}${spark.changePct.toFixed(2)}%`;
+                            head.appendChild(badge);
+                        } else {
+                            svg.outerHTML = '<p style="color: var(--muted); font-size: 0.8rem; padding: 26px 0;">Not enough data points</p>';
+                        }
+                    } else {
+                        svg.outerHTML = '<p style="color: var(--muted); font-size: 0.8rem; padding: 26px 0;">Data unavailable</p>';
+                    }
+                } catch (e) {
+                    console.error(`Sparkline error for ${s.symbol}:`, e);
+                }
+            }
+            document.getElementById('pulse-updated').textContent =
+                `Updated ${new Date().toLocaleTimeString()}`;
         }
 
         function updateDashboard(data) {
             if (!data) return;
             const system = data.system || {};
 
-            // Update stats (hapus skeleton)
-            setStat('total-signals', system.signals_24h ?? (data.signals?.length || 0));
+            // Update stats dengan animasi count-up
+            animateValue(document.getElementById('total-signals'), system.signals_24h ?? (data.signals?.length || 0));
             const successRate = system.success_rate;
-            setStat('success-rate',
-                (successRate !== undefined && successRate !== null) ? `${successRate}%` : '0%');
-            setStat('uptime', `${data.uptime || 0}h`);
+            animateValue(document.getElementById('success-rate'),
+                (successRate !== undefined && successRate !== null) ? successRate : 0,
+                { decimals: 1, suffix: '%' });
+            animateValue(document.getElementById('uptime'), Number(data.uptime) || 0, { decimals: 2, suffix: 'h' });
 
             document.getElementById('meta-anomalies').textContent =
                 `Total anomalies: ${system.total_anomalies ?? '–'}`;
@@ -799,10 +1341,6 @@
             renderSignals();
             document.getElementById('signals-updated').textContent =
                 `Updated ${new Date().toLocaleTimeString()}`;
-        }
-
-        function setStat(id, value) {
-            document.getElementById(id).textContent = value;
         }
 
         // ===== Sorting generik untuk tabel =====
@@ -873,7 +1411,11 @@
         function renderAnomalies() {
             const tbody = document.getElementById('anomalies-body');
             if (!anomaliesData.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-row">No anomalies detected yet</td></tr>';
+                const filtered = document.getElementById('symbol-filter').value;
+                const msg = filtered
+                    ? `No anomalies for <strong>${escapeHtml(filtered)}</strong>`
+                    : 'No anomalies detected yet';
+                tbody.innerHTML = `<tr><td colspan="5" class="empty-row">${msg}</td></tr>`;
                 return;
             }
             const { key, dir } = sortState['anomalies-table'];
@@ -913,6 +1455,7 @@
         function refreshAll() {
             fetchStats();
             fetchAnomalies();
+            fetchSymbols();
         }
 
         document.getElementById('auto-refresh-toggle').addEventListener('click', function() {
@@ -924,6 +1467,35 @@
         document.getElementById('refresh-btn').addEventListener('click', () => {
             refreshAll();
             addLog('Manual refresh triggered');
+            toast('Dashboard data refreshed', 'success');
+        });
+        document.getElementById('symbol-filter').addEventListener('change', () => {
+            fetchAnomalies();
+            const v = document.getElementById('symbol-filter').value;
+            addLog(v ? `Filtering anomalies: ${v}` : 'Anomaly filter cleared');
+        });
+        document.getElementById('theme-btn').addEventListener('click', toggleTheme);
+        document.getElementById('banner-retry').addEventListener('click', () => {
+            hideErrorBanner();
+            refreshAll();
+            addLog('Retrying data fetch…', 'info');
+        });
+        document.getElementById('banner-dismiss').addEventListener('click', hideErrorBanner);
+
+        // ===== Keyboard shortcuts =====
+        document.addEventListener('keydown', (e) => {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            if (e.target.matches('input, select, textarea')) return;
+            const k = e.key.toLowerCase();
+            if (k === 'r') {
+                refreshAll();
+                toast('Dashboard data refreshed', 'success');
+            } else if (k === 't') {
+                toggleTheme();
+            } else if (k === 'a') {
+                setAutoRefresh(!autoRefresh);
+                toast(`Auto-refresh ${autoRefresh ? 'enabled' : 'disabled'}`, 'info');
+            }
         });
 
         // ===== Security audit =====
@@ -952,34 +1524,39 @@
                             </div>
                         </div>
                         <div class="audit-grid">
-                            <div>Tests Passed: <strong style="color: #00ff88">${passed}</strong></div>
-                            <div>Tests Failed: <strong style="color: #ff5252">${audit.pentest.tests_failed}</strong></div>
+                            <div>Tests Passed: <strong style="color: var(--accent-2)">${passed}</strong></div>
+                            <div>Tests Failed: <strong style="color: var(--danger)">${audit.pentest.tests_failed}</strong></div>
                         </div>
                         <div style="margin-top: 15px;">
                             <strong>Packages Scanned:</strong> ${audit.dependencies.scanned || 0} |
                             <strong>Vulnerabilities Found:</strong> ${audit.dependencies.vulnerable || 0}
                         </div>
-                        <pre style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-top: 10px; overflow-x: auto; font-size: 0.8rem;">${escapeHtml(audit.report)}</pre>
+                        <pre style="background: var(--log-bg); padding: 15px; border-radius: 8px; margin-top: 10px; overflow-x: auto; font-size: 0.8rem;">${escapeHtml(audit.report)}</pre>
                     `;
                     resultsDiv.innerHTML = '';
                     resultsDiv.appendChild(fill);
 
+                    toast(`Security audit completed: ${score}/100`, score >= 60 ? 'success' : 'warn');
                     addLog(`Security audit completed: ${score}/100 score`, score >= 60 ? 'success' : 'error');
                 } else {
-                    resultsDiv.innerHTML = `<p style="color: #ff5252">Audit error: ${escapeHtml(data.message)}</p>`;
+                    resultsDiv.innerHTML = `<p style="color: var(--danger)">Audit error: ${escapeHtml(data.message)}</p>`;
+                    toast('Security audit failed', 'error');
                 }
             } catch (error) {
-                resultsDiv.innerHTML = `<p style="color: #ff5252">Audit failed: ${escapeHtml(error.message)}</p>`;
+                resultsDiv.innerHTML = `<p style="color: var(--danger)">Audit failed: ${escapeHtml(error.message)}</p>`;
+                toast('Security audit failed', 'error');
             }
         }
 
         // ===== Export CSV klik (log aksi) =====
         document.getElementById('export-btn').addEventListener('click', () => {
             addLog('Exporting signals to CSV...');
+            toast('Preparing CSV download…', 'info');
         });
 
         // ===== Init =====
         document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
             wireSorting('signals-table', renderSignals);
             wireSorting('anomalies-table', renderAnomalies);
             connectWebSocket();
